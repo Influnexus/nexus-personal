@@ -1,0 +1,27 @@
+import { z } from 'zod';
+
+export const registerSchema = z.object({
+  name: z.string().min(2).max(80),
+  email: z.string().email(),
+  password: z.string().min(8).max(100),
+});
+
+export const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+});
+
+export const createOrgSchema = z.object({
+  name: z.string().min(2).max(60),
+  slug: z.string().min(2).max(40).regex(/^[a-z0-9-]+$/),
+});
+
+export const inviteSchema = z.object({
+  email: z.string().email(),
+  role: z.enum(['ADMIN','MEMBER','VIEWER']),
+});
+
+export const profileSchema = z.object({
+  name: z.string().min(1).max(80).optional(),
+  image: z.string().url().optional().or(z.literal('')),
+});
