@@ -1,53 +1,57 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Logo } from '@/components/app/Logo';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, Users, Building2, Bell, Settings, CreditCard, User, FileText } from 'lucide-react';
+import { LayoutDashboard, Users, Building2, Bell, Settings, CreditCard, User, Sparkles } from 'lucide-react';
+import { OrgSwitcher } from './OrgSwitcher';
 
-const nav = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+const workspace = [
+  { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
   { href: '/team', label: 'Team', icon: Users },
   { href: '/organization', label: 'Organization', icon: Building2 },
-  { href: '/notifications', label: 'Notifications', icon: Bell },
   { href: '/billing', label: 'Billing', icon: CreditCard },
+  { href: '/notifications', label: 'Notifications', icon: Bell },
 ];
-
-const secondary = [
+const account = [
   { href: '/profile', label: 'Profile', icon: User },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
-export function AppSidebar() {
+export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const Item = ({ href, label, icon: Icon }: any) => {
     const active = pathname === href || pathname?.startsWith(href + '/');
     return (
-      <Link href={href}
-        className={cn('group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition',
-          active ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground')}>
-        <Icon className={cn('h-4 w-4', active ? '' : 'text-sidebar-foreground/60 group-hover:text-sidebar-accent-foreground')} />
-        {label}
+      <Link href={href} onClick={onNavigate}
+        className={cn('group relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors',
+          active
+            ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+            : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground')}>
+        <Icon className={cn('h-4 w-4 transition-colors', active ? 'text-sidebar-accent-foreground' : 'text-sidebar-foreground/50 group-hover:text-sidebar-accent-foreground')} />
+        <span>{label}</span>
+        {active && <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-r bg-foreground" />}
       </Link>
     );
   };
   return (
-    <aside className="hidden h-screen w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:flex">
-      <div className="flex h-14 items-center px-5"><Logo href="/dashboard" /></div>
-      <div className="px-3 pb-2 pt-1">
-        <p className="px-3 pb-1.5 text-[11px] font-medium uppercase tracking-wider text-sidebar-foreground/50">Workspace</p>
-        <nav className="space-y-0.5">{nav.map((i) => <Item key={i.href} {...i} />)}</nav>
+    <div className="flex h-full w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
+      <div className="flex h-14 items-center px-3">
+        <OrgSwitcher />
       </div>
-      <div className="mt-2 px-3">
-        <p className="px-3 pb-1.5 text-[11px] font-medium uppercase tracking-wider text-sidebar-foreground/50">Account</p>
-        <nav className="space-y-0.5">{secondary.map((i) => <Item key={i.href} {...i} />)}</nav>
+      <div className="flex-1 overflow-y-auto px-2 py-2">
+        <p className="px-2.5 pb-1.5 pt-1 text-[10.5px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">Workspace</p>
+        <nav className="space-y-0.5">{workspace.map((i) => <Item key={i.href} {...i} />)}</nav>
+        <p className="mt-5 px-2.5 pb-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">Account</p>
+        <nav className="space-y-0.5">{account.map((i) => <Item key={i.href} {...i} />)}</nav>
       </div>
-      <div className="mt-auto p-4">
-        <div className="rounded-xl border border-sidebar-border bg-sidebar-accent/40 p-3 text-xs text-sidebar-foreground/80">
-          <p className="font-medium text-sidebar-foreground">Sprint 2 preview</p>
-          <p className="mt-0.5 text-sidebar-foreground/60">AI CFO, Agents and Insights coming soon.</p>
+      <div className="p-3">
+        <div className="relative overflow-hidden rounded-xl border border-sidebar-border bg-gradient-to-br from-sidebar-accent/60 to-sidebar-accent/20 p-3">
+          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/80">
+            <Sparkles className="h-3.5 w-3.5" /> Sprint 2
+          </div>
+          <p className="mt-1.5 text-xs text-sidebar-foreground/60">AI CFO, Agents and Insights are arriving soon.</p>
         </div>
       </div>
-    </aside>
+    </div>
   );
 }
