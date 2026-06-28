@@ -1,0 +1,46 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@/auth';
+import { runCfoAgent } from '@/lib/ai/agent';
+import { conversationsRepo } from '@/lib/repositories/conversations';
+import { v4 as uuid } from 'uuid';
+
+export const runtime = 'nodejs';
+
+export async function POST(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const orgId = session.user.activeOrgId;
+  if (!orgId) return NextResponse.json({ error: 'No active organization' }, { status: 400 });
+
+  const { messages, conversationId } = await req.json();
+  if (!Array.isArray(messages) || messages.length === 0) return NextResponse.json({ error: 'messages required' }, { status: 400 });
+
+  let convo = conversationId ? await conversationsRepo.findById(conversationId) : null;
+  if (!convo) {
+    const firstUser = messages.find((m: any) => m.role === 'user')?.content || 'New conversation';
+    const title = String(firstUser).slice(0, 60);
+    convo = await conversationsRepo.create({ organizationId: orgId, userId: session.user.id, title });
+  }
+
+  try {
+    const trace = await runCfoAgent(messages, { organizationId: orgId }, { maxSteps: 6, temperature: 0.3 });
+    const now = new Date();
+    const userMsg = messages[messages.length - 1];
+    await conversationsRepo.appendMessages(convo.id, [
+      { id: uuid(), role: 'user', content: typeof userMsg.content === 'string' ? userMsg.content : JSON.stringify(userMsg.content), createdAt: now },
+      { id: uuid(), role: 'assistant', content: trace.finalAnswer, tool_calls: trace.toolCalls, createdAt: new Date() },
+    ]);
+    return NextResponse.json({ conversationId: convo.id, answer: trace.finalAnswer, toolCalls: trace.toolCalls });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message || 'AI error' }, { status: 500 });
+  }
+}
+
+export async function GET() {
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const orgId = session.user.activeOrgId;
+  if (!orgId) return NextResponse.json({ conversations: [] });
+  const list = await conversationsRepo.listByUser(orgId, session.user.id);
+  return NextResponse.json({ conversations: list.map(c => ({ id: c.id, title: c.title, updatedAt: c.updatedAt })) });
+}
