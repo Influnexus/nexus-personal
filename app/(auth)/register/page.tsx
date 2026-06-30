@@ -7,28 +7,82 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+
+type Status =
+  | { kind: 'idle' }
+  | { kind: 'submitting' }
+  | { kind: 'error'; message: string }
+  | { kind: 'success' };
 
 export default function RegisterPage() {
   const router = useRouter();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<Status>({ kind: 'idle' });
+  const loading = status.kind === 'submitting';
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
+    if (loading) return;
+
+    // Client-side guards so the user always gets feedback.
+    if (name.trim().length < 2) return setStatus({ kind: 'error', message: 'Please enter your full name.' });
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return setStatus({ kind: 'error', message: 'Please enter a valid email address.' });
+    if (password.length < 8) return setStatus({ kind: 'error', message: 'Password must be at least 8 characters.' });
+
+    setStatus({ kind: 'submitting' });
+    console.log('[register] submitting', email);
+
+    let registerOk = false;
     try {
-      const res = await fetch('/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, email, password }) });
-      const data = await res.json();
-      if (!res.ok) { toast.error(data.error || 'Registration failed'); return; }
-      const signin = await signIn('credentials', { email, password, redirect: false });
-      if (signin?.error) { toast.error('Could not sign in'); return; }
-      toast.success('Account created');
-      router.push('/organization');
-      router.refresh();
-    } finally { setLoading(false); }
+      const res = await fetch('/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), email: email.trim().toLowerCase(), password }),
+      });
+      const data = await res.json().catch(() => ({} as any));
+      console.log('[register] /api/register status', res.status, data);
+      if (!res.ok) {
+        const msg = data?.error || `Registration failed (HTTP ${res.status})`;
+        setStatus({ kind: 'error', message: msg });
+        toast.error(msg);
+        return;
+      }
+      registerOk = true;
+    } catch (err: any) {
+      console.error('[register] network error', err);
+      const msg = `Network error: ${err?.message || 'could not reach server'}. Please retry.`;
+      setStatus({ kind: 'error', message: msg });
+      toast.error(msg);
+      return;
+    }
+
+    // Auto sign-in. If it fails for any reason, the user is still created — fall back to /login.
+    try {
+      const signinRes = await signIn('credentials', { email: email.trim().toLowerCase(), password, redirect: false });
+      console.log('[register] signIn result', signinRes);
+      if (signinRes?.error) {
+        toast.success('Account created. Please sign in.');
+        router.push('/login?registered=1');
+        return;
+      }
+    } catch (err) {
+      console.error('[register] signIn threw', err);
+      router.push('/login?registered=1');
+      return;
+    }
+
+    setStatus({ kind: 'success' });
+    toast.success('Welcome to NexusAI \u2014 your workspace is ready.');
+    // Try Next router first; fall back to a hard navigation so the user can never get stuck.
+    try { router.push('/organization'); router.refresh(); } catch { /* ignore */ }
+    setTimeout(() => {
+      if (typeof window !== 'undefined' && window.location.pathname.startsWith('/register')) {
+        window.location.href = '/organization';
+      }
+    }, 800);
   }
 
   return (
@@ -37,10 +91,22 @@ export default function RegisterPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Create your account</h1>
         <p className="mt-1.5 text-sm text-muted-foreground">Start your NexusAI workspace in seconds.</p>
       </div>
-      <form onSubmit={onSubmit} className="space-y-4 rounded-2xl border bg-card p-6 shadow-sm">
+      <form onSubmit={onSubmit} noValidate className="space-y-4 rounded-2xl border bg-card p-6 shadow-sm">
+        {status.kind === 'error' && (
+          <div role="alert" className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{status.message}</span>
+          </div>
+        )}
+        {status.kind === 'success' && (
+          <div role="status" className="flex items-start gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-400">
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>Account created. Redirecting you to your workspace…</span>
+          </div>
+        )}
         <div className="space-y-1.5">
           <Label htmlFor="name">Full name</Label>
-          <Input id="name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Ada Lovelace" />
+          <Input id="name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Ada Lovelace" autoComplete="name" />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="email">Work email</Label>
@@ -50,8 +116,8 @@ export default function RegisterPage() {
           <Label htmlFor="password">Password</Label>
           <Input id="password" type="password" autoComplete="new-password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" />
         </div>
-        <Button type="submit" disabled={loading} className="w-full">
-          {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create account
+        <Button type="submit" disabled={loading} className="w-full" aria-busy={loading}>
+          {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating account…</> : 'Create account'}
         </Button>
         <p className="text-center text-xs text-muted-foreground">By signing up you agree to our Terms and Privacy Policy.</p>
       </form>
