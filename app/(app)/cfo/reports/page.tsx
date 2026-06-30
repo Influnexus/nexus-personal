@@ -1,13 +1,15 @@
 'use client';
 import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, FileText, Sparkles, Download } from 'lucide-react';
+import { Loader2, FileText, Sparkles, Printer } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function ReportsPage() {
   const [report, setReport] = useState<string>('');
+  const [ctx, setCtx] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [orgName] = useState<string>('Your workspace');
 
   async function generate() {
     setLoading(true);
@@ -15,25 +17,17 @@ export default function ReportsPage() {
       const r = await fetch('/api/cfo/report', { method: 'POST' });
       const d = await r.json();
       if (!r.ok) { toast.error(d.error || 'Report failed'); return; }
-      setReport(d.markdown || '');
+      setReport(d.markdown || ''); setCtx(d.context || null);
       toast.success('Report generated');
     } finally { setLoading(false); }
   }
 
-  function download() {
-    if (!report) return;
-    const blob = new Blob([report], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = `nexusai-report-${new Date().toISOString().slice(0,10)}.md`; a.click();
-    URL.revokeObjectURL(url);
-  }
-
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-8">
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div><h1 className="text-2xl font-semibold tracking-tight md:text-[28px]">AI Financial Reports</h1><p className="text-sm text-muted-foreground">Generate an executive monthly summary with the CFO’s analysis.</p></div>
+      <div className="no-print flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div><h1 className="text-2xl font-semibold tracking-tight md:text-[28px]">AI Financial Reports</h1><p className="text-sm text-muted-foreground">Board-meeting ready. Generate, then export as PDF via your browser’s print dialog.</p></div>
         <div className="flex gap-2">
-          {report && <Button variant="outline" onClick={download}><Download className="mr-2 h-4 w-4" /> Export</Button>}
+          {report && <Button variant="outline" onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" /> Export PDF</Button>}
           <Button onClick={generate} disabled={loading}>{loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating…</> : <><Sparkles className="mr-2 h-4 w-4" /> Generate report</>}</Button>
         </div>
       </div>
@@ -41,20 +35,53 @@ export default function ReportsPage() {
       {!report && !loading && (
         <Card><CardContent className="flex flex-col items-center justify-center py-16 text-center">
           <FileText className="h-10 w-10 text-muted-foreground" />
-          <p className="mt-3 font-medium">No report generated yet</p>
-          <p className="text-sm text-muted-foreground">Click “Generate report” to produce an executive monthly summary based on the latest data.</p>
+          <p className="mt-3 font-medium">No report yet</p>
+          <p className="text-sm text-muted-foreground">Click “Generate report” to produce an executive monthly summary.</p>
         </CardContent></Card>
       )}
       {loading && <Card><CardContent className="py-12 text-center text-sm text-muted-foreground"><Loader2 className="mx-auto h-5 w-5 animate-spin" /><p className="mt-3">The CFO is drafting your report…</p></CardContent></Card>}
+
       {report && (
-        <Card><CardContent className="p-6 md:p-10">
-          <article className="prose prose-sm max-w-none dark:prose-invert prose-headings:font-semibold prose-headings:tracking-tight prose-h2:mt-8 prose-h2:text-xl prose-h2:border-b prose-h2:pb-2 prose-p:leading-relaxed">
+        <div className="report-sheet">
+          <header className="mb-8 flex items-center justify-between border-b pb-5">
+            <div className="flex items-center gap-3">
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-foreground text-background">
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M4 20 L20 4" /><path d="M4 4 L20 20" /><circle cx="12" cy="12" r="3" /></svg>
+              </span>
+              <div><p className="text-sm font-semibold tracking-tight">NexusAI CFO</p><p className="text-xs text-muted-foreground">Executive Financial Report — {new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</p></div>
+            </div>
+            <div className="text-right"><p className="text-xs uppercase tracking-wider text-muted-foreground">Prepared for</p><p className="text-sm font-medium">{orgName}</p></div>
+          </header>
+          {ctx && (
+            <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+              <Tile label="Health" value={`${ctx.health.score}/100`} />
+              <Tile label="Revenue (30d)" value={`$${Math.round(ctx.kpis.revenue30d).toLocaleString()}`} />
+              <Tile label="Expenses (30d)" value={`$${Math.round(ctx.kpis.expenses30d).toLocaleString()}`} />
+              <Tile label="Runway" value={ctx.kpis.runwayDays == null ? '∞' : `${ctx.kpis.runwayDays} d`} />
+            </div>
+          )}
+          <article className="prose prose-sm max-w-none dark:prose-invert prose-headings:font-semibold prose-headings:tracking-tight prose-h2:mt-7 prose-h2:text-lg prose-h2:border-b prose-h2:pb-2 prose-p:leading-relaxed">
             <Md text={report} />
           </article>
-        </CardContent></Card>
+          <footer className="mt-10 border-t pt-4 text-center text-[10px] uppercase tracking-wider text-muted-foreground">Generated by NexusAI CFO · Claude Sonnet 4.5 · Verify critical figures before acting.</footer>
+        </div>
       )}
+
+      <style jsx global>{`
+        @media print {
+          .no-print, aside, header.sticky { display: none !important; }
+          body { background: white !important; }
+          .report-sheet { box-shadow: none !important; border: none !important; padding: 0 !important; }
+          main, .report-sheet { max-width: none !important; padding: 0 !important; }
+        }
+        .report-sheet { background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 16px; padding: 32px; }
+        @media (min-width: 768px) { .report-sheet { padding: 48px; } }
+      `}</style>
     </div>
   );
+}
+function Tile({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-xl border bg-muted/30 p-3"><div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</div><div className="mt-1 text-lg font-semibold tabular-nums">{value}</div></div>;
 }
 function Md({ text }: { text: string }) {
   const blocks = text.split(/\n\n+/);

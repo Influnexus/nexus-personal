@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ArrowUpRight, TrendingUp, TrendingDown, AlertTriangle, ShieldCheck, Sparkles, MessageSquare, Receipt, Wallet, Activity } from 'lucide-react';
 import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
+import { OnboardingBanner } from '@/components/app/OnboardingBanner';
 
 const fetcher = (u: string) => fetch(u).then(r => r.json());
 
@@ -25,6 +26,9 @@ export default function ExecutiveOverview() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-8">
+      {/* Onboarding banner */}
+      <OnboardingBanner orgsCount={1} hasData={(kpis.revenue30d + kpis.expenses30d) > 0} />
+
       {/* Executive briefing */}
       <Card className="relative overflow-hidden border-foreground/15 bg-gradient-to-br from-foreground to-foreground/80 text-background">
         <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-background/10 blur-3xl" />
@@ -78,7 +82,7 @@ export default function ExecutiveOverview() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <div><CardTitle className="text-base">Cash flow forecast</CardTitle><CardDescription>Next 90 days based on 30d trailing trend</CardDescription></div>
-              <Badge variant="secondary">+${fmt(forecast.net)}/day net</Badge>
+              <Badge variant="secondary">{forecast.scheduledEvents} events scheduled</Badge>
             </div>
           </CardHeader>
           <CardContent className="h-72">

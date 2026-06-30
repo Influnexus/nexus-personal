@@ -23,7 +23,7 @@ export async function POST() {
     financeService.cashflowForecast(orgId, 90),
   ]);
 
-  const ctx = { kpis, health, breakdown, vendors, anomalies, overdue: overdue.slice(0, 5), recs, forecast: { dailyRev: forecast.dailyRev, dailyExp: forecast.dailyExp, net: forecast.net, endCash: forecast.series.at(-1)?.cash } };
+  const ctx = { kpis, health, breakdown, vendors, anomalies, overdue: overdue.slice(0, 5), recs, forecast: { startingCash: forecast.startingCash, endingCash: forecast.endingCash, lowestDay: forecast.lowestDay, narrative: forecast.narrative, scheduledEvents: forecast.scheduledEvents } };
 
   const prompt = `Generate an executive monthly financial report. Use ONLY the data provided in CONTEXT. Output markdown with these exact sections (use ## headings):
 ## Executive Summary

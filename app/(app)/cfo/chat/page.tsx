@@ -1,17 +1,17 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
 import useSWR from 'swr';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Send, Sparkles, Wrench, Loader2, MessageSquare } from 'lucide-react';
+import { Send, Sparkles, Wrench, Loader2, MessageSquare, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const fetcher = (u: string) => fetch(u).then(r => r.json());
 
-interface UIMsg { role: 'user' | 'assistant'; content: string; toolCalls?: any[] }
+interface ToolStep { name: string; label: string; status: 'running' | 'done' }
+interface UIMsg { role: 'user' | 'assistant'; content: string; tools?: ToolStep[]; streaming?: boolean }
 
 const SUGGESTIONS = [
   'What is my cash runway right now?',
@@ -32,21 +32,45 @@ export default function ChatPage() {
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }); }, [messages, loading]);
 
   async function send(prompt?: string) {
-    const text = (prompt ?? input).trim();
-    if (!text || loading) return;
-    const next = [...messages, { role: 'user' as const, content: text }];
+    const text = (prompt ?? input).trim(); if (!text || loading) return;
+    const userMsg: UIMsg = { role: 'user', content: text };
+    const placeholder: UIMsg = { role: 'assistant', content: '', tools: [], streaming: true };
+    const next = [...messages, userMsg, placeholder];
     setMessages(next); setInput(''); setLoading(true);
+
     try {
-      const res = await fetch('/api/cfo/chat', {
+      const res = await fetch('/api/cfo/chat/stream', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: next.map(m => ({ role: m.role, content: m.content })), conversationId: convId }),
+        body: JSON.stringify({ messages: [...messages, userMsg].map(m => ({ role: m.role, content: m.content })), conversationId: convId }),
       });
-      const d = await res.json();
-      if (!res.ok) { setMessages([...next, { role: 'assistant', content: `⚠️ ${d.error || 'AI error'}` }]); return; }
-      setConvId(d.conversationId);
-      setMessages([...next, { role: 'assistant', content: d.answer, toolCalls: d.toolCalls }]);
-      mutateConvos();
+      if (!res.ok || !res.body) { update(prev => ({ ...prev, content: '⚠️ Stream failed', streaming: false })); return; }
+      const reader = res.body.getReader(); const decoder = new TextDecoder(); let buf = '';
+      let assistantText = '';
+      const tools: ToolStep[] = [];
+      while (true) {
+        const { done, value } = await reader.read(); if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const events = buf.split('\n\n'); buf = events.pop() || '';
+        for (const ev of events) {
+          const eMatch = ev.match(/event: (\w+)\ndata: (.+)/s);
+          if (!eMatch) continue;
+          const type = eMatch[1]; let data: any = {}; try { data = JSON.parse(eMatch[2]); } catch { }
+          if (type === 'meta') { if (data.conversationId) setConvId(data.conversationId); }
+          else if (type === 'tool_start') { tools.push({ name: data.name, label: data.label, status: 'running' }); update(p => ({ ...p, tools: [...tools] })); }
+          else if (type === 'tool_done') { const t = tools.find(x => x.name === data.name && x.status === 'running'); if (t) t.status = 'done'; update(p => ({ ...p, tools: [...tools] })); }
+          else if (type === 'token') { assistantText += data.delta || ''; update(p => ({ ...p, content: assistantText })); }
+          else if (type === 'answer_end') { /* final */ }
+          else if (type === 'done') { update(p => ({ ...p, streaming: false })); mutateConvos(); }
+          else if (type === 'error') { update(p => ({ ...p, content: '⚠️ ' + (data.message || 'AI error'), streaming: false })); }
+        }
+      }
+    } catch (e: any) {
+      update(p => ({ ...p, content: '⚠️ ' + (e.message || 'Network error'), streaming: false }));
     } finally { setLoading(false); }
+
+    function update(mutator: (m: UIMsg) => UIMsg) {
+      setMessages(prev => { const copy = [...prev]; const idx = copy.length - 1; copy[idx] = mutator(copy[idx]); return copy; });
+    }
   }
 
   const convos = convosData?.conversations || [];
@@ -64,11 +88,10 @@ export default function ChatPage() {
                   const r = await fetch(`/api/cfo/conversations/${c.id}`); const d = await r.json();
                   if (d.conversation) {
                     setConvId(c.id);
-                    setMessages(d.conversation.messages.filter((m: any) => m.role === 'user' || m.role === 'assistant').map((m: any) => ({ role: m.role, content: m.content, toolCalls: m.tool_calls })));
+                    setMessages(d.conversation.messages.filter((m: any) => m.role === 'user' || m.role === 'assistant').map((m: any) => ({ role: m.role, content: m.content })));
                   }
                 }} className={cn('flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition hover:bg-accent', convId === c.id && 'bg-accent')}>
-                  <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="truncate">{c.title}</span>
+                  <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" /><span className="truncate">{c.title}</span>
                 </button>
               </li>
             ))}
@@ -79,7 +102,7 @@ export default function ChatPage() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center justify-between border-b px-4 py-3 md:px-6">
-          <div><h1 className="text-base font-semibold">Ask the CFO</h1><p className="text-xs text-muted-foreground">Powered by Claude Sonnet 4.5 with financial tools</p></div>
+          <div><h1 className="text-base font-semibold">Ask the CFO</h1><p className="text-xs text-muted-foreground">Streaming · Claude Sonnet 4.5 · grounded in your data</p></div>
           <Badge variant="secondary" className="gap-1"><Sparkles className="h-3 w-3" /> NexusAI CFO</Badge>
         </div>
         <div ref={scrollRef} className="flex-1 overflow-y-auto">
@@ -98,27 +121,17 @@ export default function ChatPage() {
             )}
             <ul className="space-y-6">
               {messages.map((m, i) => <MsgBubble key={i} msg={m} />)}
-              {loading && (
-                <li className="flex items-start gap-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground text-background"><Sparkles className="h-4 w-4" /></div>
-                  <div className="flex items-center gap-2 rounded-2xl rounded-tl-sm border bg-card px-4 py-3 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Analyzing your financials…</div>
-                </li>
-              )}
             </ul>
           </div>
         </div>
         <div className="border-t bg-background p-3 md:p-4">
           <form onSubmit={(e) => { e.preventDefault(); send(); }} className="mx-auto flex max-w-3xl items-end gap-2">
-            <Textarea
-              value={input} onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask about cash, runway, expenses, invoices…"
-              rows={1}
+            <Textarea value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ask about cash, runway, expenses, invoices…" rows={1}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-              className="min-h-[44px] resize-none rounded-2xl border-border/80"
-            />
+              className="min-h-[44px] resize-none rounded-2xl border-border/80" />
             <Button type="submit" disabled={loading || !input.trim()} className="h-11 rounded-full px-4"><Send className="h-4 w-4" /></Button>
           </form>
-          <p className="mt-2 text-center text-[11px] text-muted-foreground">CFO uses your transactions, invoices, and vendor data. Verify critical numbers before acting.</p>
+          <p className="mt-2 text-center text-[11px] text-muted-foreground">CFO uses your transactions, invoices and vendor data. Verify critical numbers before acting.</p>
         </div>
       </div>
     </div>
@@ -127,25 +140,31 @@ export default function ChatPage() {
 
 function MsgBubble({ msg }: { msg: UIMsg }) {
   if (msg.role === 'user') {
-    return (
-      <li className="flex justify-end">
-        <div className="max-w-[80%] rounded-2xl rounded-tr-sm bg-foreground px-4 py-2.5 text-sm text-background">{msg.content}</div>
-      </li>
-    );
+    return <li className="flex justify-end"><div className="max-w-[80%] rounded-2xl rounded-tr-sm bg-foreground px-4 py-2.5 text-sm text-background">{msg.content}</div></li>;
   }
+  const hasTools = msg.tools && msg.tools.length > 0;
   return (
     <li className="flex items-start gap-3">
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground text-background"><Sparkles className="h-4 w-4" /></div>
-      <div className="min-w-0 flex-1">
-        <div className="rounded-2xl rounded-tl-sm border bg-card px-4 py-3 text-[14.5px] leading-relaxed">
-          <Markdown text={msg.content} />
-        </div>
-        {msg.toolCalls && msg.toolCalls.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1">
-            {msg.toolCalls.map((tc: any, i: number) => (
-              <span key={i} className="inline-flex items-center gap-1 rounded-full border bg-muted/40 px-2 py-0.5 text-[10.5px] text-muted-foreground"><Wrench className="h-2.5 w-2.5" />{tc.name}</span>
+      <div className="min-w-0 flex-1 space-y-2">
+        {hasTools && (
+          <div className="space-y-1 rounded-xl border border-border/60 bg-muted/30 p-2.5">
+            {msg.tools!.map((t, i) => (
+              <div key={i} className="flex items-center gap-2 text-[12.5px]">
+                {t.status === 'running' ? <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" /> : <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />}
+                <span className={t.status === 'running' ? 'text-foreground' : 'text-muted-foreground line-through decoration-muted-foreground/40'}>{t.label}</span>
+              </div>
             ))}
           </div>
+        )}
+        {(msg.content || !msg.streaming) && (
+          <div className="rounded-2xl rounded-tl-sm border bg-card px-4 py-3 text-[14.5px] leading-relaxed">
+            <Markdown text={msg.content || ''} />
+            {msg.streaming && <span className="ml-0.5 inline-block h-3.5 w-1 animate-pulse bg-foreground/70 align-middle" />}
+          </div>
+        )}
+        {msg.streaming && !msg.content && !hasTools && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Thinking…</div>
         )}
       </div>
     </li>
@@ -158,18 +177,13 @@ function Markdown({ text }: { text: string }) {
     if (lines.every(l => /^\s*\*\s|^\s*-\s|^\s*\d+\.\s/.test(l))) {
       const isNum = /^\s*\d+\.\s/.test(lines[0]);
       return isNum ?
-        <ol key={i} className="list-decimal space-y-1 pl-5">{lines.map((l, j) => <li key={j}><Inline text={l.replace(/^\s*\d+\.\s/, '')} /></li>)}</ol> :
-        <ul key={i} className="space-y-1">{lines.map((l, j) => <li key={j} className="flex gap-2"><span className="text-muted-foreground">•</span><span className="flex-1"><Inline text={l.replace(/^\s*[\*\-]\s/, '')} /></span></li>)}</ul>;
+        <ol key={i} className="list-decimal space-y-1 pl-5">{lines.map((l, j) => <li key={j}><Inline t={l.replace(/^\s*\d+\.\s/, '')} /></li>)}</ol> :
+        <ul key={i} className="space-y-1">{lines.map((l, j) => <li key={j} className="flex gap-2"><span className="text-muted-foreground">•</span><span className="flex-1"><Inline t={l.replace(/^\s*[\*\-]\s/, '')} /></span></li>)}</ul>;
     }
-    if (/^#{1,3}\s/.test(b)) {
-      const lvl = (b.match(/^#+/) || [''])[0].length;
-      const txt = b.replace(/^#+\s/, '');
-      return <p key={i} className={lvl <= 2 ? 'font-semibold text-base' : 'font-semibold'}>{txt}</p>;
-    }
-    return <p key={i}><Inline text={b} /></p>;
+    return <p key={i}><Inline t={b} /></p>;
   })}</div>);
 }
-function Inline({ text }: { text: string }) {
-  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+function Inline({ t }: { t: string }) {
+  const parts = t.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
   return <>{parts.map((p, i) => p.startsWith('**') ? <strong key={i} className="font-semibold">{p.slice(2, -2)}</strong> : p.startsWith('`') ? <code key={i} className="rounded bg-muted px-1 py-0.5 text-[12.5px]">{p.slice(1, -1)}</code> : <span key={i}>{p}</span>)}</>;
 }
