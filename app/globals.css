@@ -22,7 +22,7 @@
     --destructive-foreground: 0 0% 98%;
     --border: 240 6% 90%;
     --input: 240 6% 90%;
-    --ring: 240 5% 65%;
+    --ring: 240 5% 55%;
     --radius: 0.75rem;
     --sidebar-background: 0 0% 99%;
     --sidebar-foreground: 240 5% 26%;
@@ -43,7 +43,7 @@
     --foreground: 0 0% 98%;
     --card: 240 8% 6%;
     --card-foreground: 0 0% 98%;
-    --popover: 240 10% 4%;
+    --popover: 240 10% 6%;
     --popover-foreground: 0 0% 98%;
     --primary: 0 0% 98%;
     --primary-foreground: 240 6% 10%;
@@ -53,11 +53,11 @@
     --muted-foreground: 240 5% 65%;
     --accent: 240 4% 14%;
     --accent-foreground: 0 0% 98%;
-    --destructive: 0 63% 31%;
+    --destructive: 0 63% 41%;
     --destructive-foreground: 0 0% 98%;
     --border: 240 4% 14%;
     --input: 240 4% 14%;
-    --ring: 240 5% 35%;
+    --ring: 240 5% 50%;
     --sidebar-background: 240 10% 5%;
     --sidebar-foreground: 240 5% 80%;
     --sidebar-primary: 0 0% 98%;
@@ -65,7 +65,7 @@
     --sidebar-accent: 240 4% 12%;
     --sidebar-accent-foreground: 0 0% 98%;
     --sidebar-border: 240 4% 14%;
-    --sidebar-ring: 240 5% 35%;
+    --sidebar-ring: 240 5% 45%;
     --chart-1: 217 91% 60%;
     --chart-2: 142 71% 45%;
     --chart-3: 47 96% 53%;
@@ -76,8 +76,15 @@
 
 @layer base {
   * { @apply border-border; }
-  body { @apply bg-background text-foreground; font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1; }
+  body { @apply bg-background text-foreground; font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1, "cv11" 1; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
   ::selection { @apply bg-foreground/10; }
+  /* Premium focus ring for keyboard users everywhere */
+  :focus-visible { outline: none; box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring)); border-radius: 8px; }
+  /* Custom scrollbar */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 8px; border: 2px solid hsl(var(--background)); }
+  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.4); }
 }
 
 @layer utilities {
@@ -89,7 +96,21 @@
     background-size: 56px 56px;
     mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 100%);
   }
-  .glow {
-    background: radial-gradient(60% 60% at 50% 0%, hsl(var(--foreground) / 0.08) 0%, transparent 60%);
+  .glow { background: radial-gradient(60% 60% at 50% 0%, hsl(var(--foreground) / 0.08) 0%, transparent 60%); }
+
+  /* Shimmer skeleton */
+  .shimmer {
+    background: linear-gradient(90deg, hsl(var(--muted)) 0%, hsl(var(--muted-foreground) / 0.10) 50%, hsl(var(--muted)) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* Reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
   }
 }
