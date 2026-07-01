@@ -18,7 +18,7 @@ function $$$(n: number) { return `$${fmt(Math.round(n))}`; }
 const CHART_COLORS = ['hsl(var(--foreground))', 'hsl(var(--foreground)/0.7)', 'hsl(var(--foreground)/0.5)', 'hsl(var(--foreground)/0.35)', 'hsl(var(--foreground)/0.22)', 'hsl(var(--foreground)/0.15)', 'hsl(var(--foreground)/0.1)'];
 
 export default function ExecutiveOverview() {
-  const { data, isLoading, error } = useSWR('/api/cfo/briefing', fetcher, { revalidateOnFocus: false });
+  const { data, isLoading, error, mutate } = useSWR('/api/cfo/briefing', fetcher, { revalidateOnFocus: false });
 
   if (isLoading || !data) return <LoadingState />;
 
@@ -56,7 +56,27 @@ export default function ExecutiveOverview() {
       {/* Onboarding banner */}
       <OnboardingBanner orgsCount={1} hasData={(kpis.revenue30d + kpis.expenses30d) > 0} />
 
-      {/* Executive briefing */}
+      {/* Executive briefing OR premium AI-unavailable card */}
+      {data.aiAvailable === false ? (
+        <Card className="border-amber-500/40 bg-amber-500/[0.06]">
+          <CardContent className="flex flex-col gap-4 p-6 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-700 dark:text-amber-400">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-semibold">We're temporarily unable to reach the AI.</p>
+                <p className="mt-0.5 text-sm text-muted-foreground">Your financial analysis is complete and up to date. Please try again in a few moments.</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" onClick={() => mutate()}>Retry</Button>
+              <a href="#kpis"><Button size="sm" variant="outline">View financial metrics</Button></a>
+              <Link href="/cfo/reports"><Button size="sm" variant="ghost">Generate report without AI</Button></Link>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
       <Card className="relative overflow-hidden border-foreground/15 bg-gradient-to-br from-foreground to-foreground/80 text-background">
         <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-background/10 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-20 -left-20 h-56 w-56 rounded-full bg-background/5 blur-3xl" />
@@ -76,9 +96,10 @@ export default function ExecutiveOverview() {
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* KPIs */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div id="kpis" className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Kpi icon={Wallet} label="Revenue (30d)" value={$$$( kpis.revenue30d )} delta={kpis.revDeltaPct} positiveGood />
         <Kpi icon={TrendingDown} label="Expenses (30d)" value={$$$( kpis.expenses30d )} delta={kpis.expDeltaPct} positiveGood={false} />
         <Kpi icon={Activity} label="Net profit (30d)" value={$$$( kpis.profit30d )} sub={kpis.revenue30d > 0 ? `${((kpis.profit30d / kpis.revenue30d) * 100).toFixed(1)}% margin` : ''} />

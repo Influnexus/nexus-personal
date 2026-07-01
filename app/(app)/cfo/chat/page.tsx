@@ -61,7 +61,13 @@ export default function ChatPage() {
           else if (type === 'token') { assistantText += data.delta || ''; update(p => ({ ...p, content: assistantText })); }
           else if (type === 'answer_end') { /* final */ }
           else if (type === 'done') { update(p => ({ ...p, streaming: false })); mutateConvos(); }
-          else if (type === 'error') { update(p => ({ ...p, content: '⚠️ ' + (data.message || 'AI error'), streaming: false })); }
+          else if (type === 'error') {
+            const isAI = data.code === 'ai_unavailable';
+            const banner = isAI
+              ? "⚠️ We're temporarily unable to reach the AI. Your financial analysis is complete. Please try again in a few moments."
+              : '⚠️ ' + (data.message || 'AI error');
+            update(p => ({ ...p, content: banner, streaming: false, aiUnavailable: isAI } as any));
+          }
         }
       }
     } catch (e: any) {

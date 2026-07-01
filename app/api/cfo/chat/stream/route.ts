@@ -3,8 +3,9 @@
 
 import { NextRequest } from 'next/server';
 import { auth } from '@/auth';
-import { llm } from '@/lib/ai/provider';
+import { llm, LLMUnavailableError } from '@/lib/ai/provider';
 import { toolSpecs, runTool } from '@/lib/ai/tools';
+import { toolCache } from '@/lib/ai/tool-cache';
 import { CFO_SYSTEM_PROMPT } from '@/lib/ai/prompts';
 import { conversationsRepo } from '@/lib/repositories/conversations';
 import { v4 as uuid } from 'uuid';
@@ -66,6 +67,7 @@ export async function POST(req: NextRequest) {
               send('tool_start', { name: tc.function.name, label: PRETTY[tc.function.name] || `Running ${tc.function.name}…` });
               const out = await runTool(tc.function.name, tc.function.arguments, { organizationId: orgId });
               usedTools.push({ name: tc.function.name, result: out });
+              toolCache.set(orgId, tc.function.name, tc.function.arguments, out);
               send('tool_done', { name: tc.function.name });
               ctxMsgs.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(out).slice(0, 12000) });
             }
@@ -103,7 +105,13 @@ export async function POST(req: NextRequest) {
         send('done', { conversationId: convo!.id, toolCalls: usedTools.map(t => ({ name: t.name })) });
         close();
       } catch (e: any) {
-        send('error', { message: e.message || 'AI error' });
+        const isUnavailable = e instanceof LLMUnavailableError;
+        send('error', {
+          code: isUnavailable ? 'ai_unavailable' : 'internal',
+          message: isUnavailable
+            ? "We're temporarily unable to reach the AI. Your financial analysis is complete. Please try again in a few moments."
+            : 'Something went wrong. Please try again.',
+        });
         close();
       }
     },

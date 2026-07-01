@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { runCfoAgent } from '@/lib/ai/agent';
 import { conversationsRepo } from '@/lib/repositories/conversations';
+import { LLMUnavailableError } from '@/lib/ai/provider';
 import { v4 as uuid } from 'uuid';
 
 export const runtime = 'nodejs';
@@ -18,8 +19,7 @@ export async function POST(req: NextRequest) {
   let convo = conversationId ? await conversationsRepo.findById(conversationId) : null;
   if (!convo) {
     const firstUser = messages.find((m: any) => m.role === 'user')?.content || 'New conversation';
-    const title = String(firstUser).slice(0, 60);
-    convo = await conversationsRepo.create({ organizationId: orgId, userId: session.user.id, title });
+    convo = await conversationsRepo.create({ organizationId: orgId, userId: session.user.id, title: String(firstUser).slice(0, 60) });
   }
 
   try {
@@ -32,7 +32,11 @@ export async function POST(req: NextRequest) {
     ]);
     return NextResponse.json({ conversationId: convo.id, answer: trace.finalAnswer, toolCalls: trace.toolCalls });
   } catch (e: any) {
-    return NextResponse.json({ error: e.message || 'AI error' }, { status: 500 });
+    if (e instanceof LLMUnavailableError) {
+      return NextResponse.json({ error: 'ai_unavailable', message: 'The AI is temporarily unavailable. Please try again in a few moments.' }, { status: 503 });
+    }
+    console.error('[chat] error', e?.message);
+    return NextResponse.json({ error: 'internal', message: 'Something went wrong.' }, { status: 500 });
   }
 }
 
