@@ -18,9 +18,36 @@ function $$$(n: number) { return `$${fmt(Math.round(n))}`; }
 const CHART_COLORS = ['hsl(var(--foreground))', 'hsl(var(--foreground)/0.7)', 'hsl(var(--foreground)/0.5)', 'hsl(var(--foreground)/0.35)', 'hsl(var(--foreground)/0.22)', 'hsl(var(--foreground)/0.15)', 'hsl(var(--foreground)/0.1)'];
 
 export default function ExecutiveOverview() {
-  const { data, isLoading } = useSWR('/api/cfo/briefing', fetcher, { revalidateOnFocus: false });
+  const { data, isLoading, error } = useSWR('/api/cfo/briefing', fetcher, { revalidateOnFocus: false });
 
   if (isLoading || !data) return <LoadingState />;
+
+  // Graceful "no organization yet" onboarding state — the CFO needs an org before it can brief you.
+  if (data?.error || !data?.kpis) {
+    const noOrg = typeof data?.error === 'string' && /organization/i.test(data.error);
+    return (
+      <div className="mx-auto max-w-3xl p-6 md:p-12">
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center gap-4 py-14 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-foreground text-background">
+              <Sparkles className="h-6 w-6" />
+            </div>
+            <div className="max-w-md space-y-1.5">
+              <h2 className="text-2xl font-semibold tracking-tight">{noOrg ? 'Create your workspace to meet the CFO' : 'The CFO briefing is unavailable'}</h2>
+              <p className="text-sm text-muted-foreground">{noOrg
+                ? "Give your company a name, and NexusAI CFO will brief you on cash, revenue, expenses and risks in under 30 seconds."
+                : (data?.error || 'We hit a snag preparing your briefing. Try again in a moment.')}</p>
+            </div>
+            <Link href={noOrg ? '/organization' : '/dashboard'}>
+              <Button size="lg" className="rounded-full">
+                {noOrg ? 'Create workspace' : 'Try again'} <ArrowUpRight className="ml-1 h-4 w-4" />
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const { briefing, kpis, health, overdue, anomalies, recs, forecast, breakdown, vendors } = data;
 
