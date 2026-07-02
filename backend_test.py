@@ -12,7 +12,7 @@ from typing import Dict, Any, Optional
 from pymongo import MongoClient
 
 # Configuration
-BASE_URL = "https://nexus-core-sprint1.preview.emergentagent.com"
+BASE_URL = "https://nexus-enterprise-ai-2.preview.emergentagent.com"
 MONGO_URL = "mongodb://localhost:27017"
 DB_NAME = "nexusai"
 

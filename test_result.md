@@ -338,7 +338,7 @@ backend:
           
           7. ✅ Unauthenticated access (401) - Both /api/cfo/briefing and /api/cfo/chat/stream return 401
           
-          **Note:** Tests executed against preview URL (https://nexus-core-sprint1.preview.emergentagent.com) instead of localhost:3000 due to NextAuth CSRF/cookie domain configuration. Localhost auth fails with "MissingCSRF" error because NEXTAUTH_URL is configured for preview domain.
+          **Note:** Tests executed against preview URL (https://nexus-enterprise-ai-2.preview.emergentagent.com) instead of localhost:3000 due to NextAuth CSRF/cookie domain configuration. Localhost auth fails with "MissingCSRF" error because NEXTAUTH_URL is configured for preview domain.
           
           **All AI CFO backend endpoints are production-ready. No critical issues found.**
 
@@ -478,3 +478,20 @@ agent_communication:
       **All endpoints working correctly. No critical issues found.**
       
       **Configuration Note:** Tests run against preview URL due to NextAuth CSRF/cookie domain requirements. Localhost:3000 auth fails with "MissingCSRF" because NEXTAUTH_URL is configured for preview domain. This is a configuration limitation, not a code bug.
+  - agent: "testing"
+    message: |
+      ✅ DEPLOYMENT SMOKE TEST COMPLETE - ALL 5 CHECKS PASSED (100%)
+      
+      Performed quick smoke test after yarn build + supervisor restart (production mode).
+      Base URL: https://nexus-enterprise-ai-2.preview.emergentagent.com
+      
+      **Test Results:**
+      1. ✅ Health Check - GET /api/health returns 200 {"status":"ok"}
+      2. ✅ Database Connectivity - POST /api/register creates new user (smoketest_e06t5nlc@nexusai.com), MongoDB write confirmed
+      3. ✅ Authentication - NextAuth credentials flow working (CSRF → login → session with user data)
+      4. ✅ Organization + Dashboard - POST /api/organizations creates org, GET /api/cfo/briefing returns all required keys (briefing, kpis, health, forecast)
+      5. ✅ AI CFO Chat - POST /api/cfo/chat/stream returns text/event-stream with 'done' event, Emergent LLM integration working
+      
+      **Note on activeOrgId:** After creating an organization, a re-login is required to set activeOrgId in the session (JWT callback reads memberships). The frontend handles this via NextAuth's useSession().update() method. For API-only flows, users need to re-authenticate after org creation to access org-scoped endpoints like /api/cfo/*.
+      
+      **Deployment Status: ✅ READY - All critical paths verified, no blockers found.**
