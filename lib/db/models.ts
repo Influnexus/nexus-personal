@@ -7,6 +7,7 @@ export interface UserDoc {
   image?: string;
   passwordHash: string;
   emailVerified?: Date | null;
+  isDemo?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -18,6 +19,8 @@ export interface OrganizationDoc {
   ownerId: string;
   logoUrl?: string;
   plan?: 'free' | 'pro' | 'enterprise';
+  isDemo?: boolean;
+  demoExpiresAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -36,4 +36,7 @@ export const conversationsRepo = {
   async appendMessages(id: string, msgs: ConvMessage[]) {
     await (await col()).updateOne({ id }, { $push: { messages: { $each: msgs } as any }, $set: { updatedAt: new Date() } });
   },
+  async deleteByOrg(orgId: string) {
+    await (await col()).deleteMany({ organizationId: orgId });
+  },
 };

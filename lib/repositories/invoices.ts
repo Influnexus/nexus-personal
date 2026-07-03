@@ -42,4 +42,7 @@ export const invoicesRepo = {
   async countByOrg(orgId: string) {
     return (await col()).countDocuments({ organizationId: orgId });
   },
+  async deleteByOrg(orgId: string) {
+    await (await col()).deleteMany({ organizationId: orgId });
+  },
 };

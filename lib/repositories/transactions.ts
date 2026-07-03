@@ -31,4 +31,7 @@ export const transactionsRepo = {
   async countByOrg(orgId: string) {
     return (await txCol()).countDocuments({ organizationId: orgId });
   },
+  async deleteByOrg(orgId: string) {
+    await (await txCol()).deleteMany({ organizationId: orgId });
+  },
 };

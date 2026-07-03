@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, Users, Building2, Bell, Settings, CreditCard, User, Sparkles, MessageSquare, FileText, Receipt, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, Users, Building2, Bell, Settings, CreditCard, User, Sparkles, MessageSquare, FileText, Receipt, BarChart3, Sliders } from 'lucide-react';
 import { OrgSwitcher } from './OrgSwitcher';
 
 const aiCfo = [
@@ -11,6 +11,7 @@ const aiCfo = [
   { href: '/cfo/invoices', label: 'Invoices', icon: Receipt },
   { href: '/cfo/transactions', label: 'Transactions', icon: BarChart3 },
   { href: '/cfo/reports', label: 'Reports', icon: FileText },
+  { href: '/cfo/scenario', label: 'Scenario Simulator', icon: Sliders },
 ];
 const workspace = [
   { href: '/team', label: 'Team', icon: Users },

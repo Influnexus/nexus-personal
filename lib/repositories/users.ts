@@ -11,13 +11,14 @@ export const usersRepo = {
   async findById(id: string) {
     return (await col()).findOne({ id });
   },
-  async create(data: { email: string; name?: string; passwordHash: string }) {
+  async create(data: { email: string; name?: string; passwordHash: string; isDemo?: boolean }) {
     const now = new Date();
     const doc: UserDoc = {
       id: uuid(),
       email: data.email.toLowerCase(),
       name: data.name,
       passwordHash: data.passwordHash,
+      isDemo: data.isDemo,
       createdAt: now,
       updatedAt: now,
     };
@@ -28,5 +29,8 @@ export const usersRepo = {
     const c = await col();
     await c.updateOne({ id }, { $set: { ...patch, updatedAt: new Date() } });
     return c.findOne({ id });
+  },
+  async remove(id: string) {
+    await (await col()).deleteOne({ id });
   },
 };

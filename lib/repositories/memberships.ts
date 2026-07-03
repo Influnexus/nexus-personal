@@ -25,4 +25,7 @@ export const membershipsRepo = {
   async remove(id: string) {
     await (await col()).deleteOne({ id });
   },
+  async removeByOrg(organizationId: string) {
+    await (await col()).deleteMany({ organizationId });
+  },
 };

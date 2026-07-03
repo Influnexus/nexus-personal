@@ -7,11 +7,12 @@ const col = async () => (await getDb()).collection<OrganizationDoc>('organizatio
 export const orgsRepo = {
   async findById(id: string) { return (await col()).findOne({ id }); },
   async findBySlug(slug: string) { return (await col()).findOne({ slug }); },
-  async create(data: { name: string; slug: string; ownerId: string }) {
+  async create(data: { name: string; slug: string; ownerId: string; isDemo?: boolean; demoExpiresAt?: Date | null }) {
     const now = new Date();
     const doc: OrganizationDoc = {
       id: uuid(), name: data.name, slug: data.slug,
-      ownerId: data.ownerId, plan: 'free', createdAt: now, updatedAt: now,
+      ownerId: data.ownerId, plan: 'free', isDemo: data.isDemo, demoExpiresAt: data.demoExpiresAt,
+      createdAt: now, updatedAt: now,
     };
     await (await col()).insertOne(doc as any);
     return doc;
@@ -23,5 +24,11 @@ export const orgsRepo = {
   },
   async listByIds(ids: string[]) {
     return (await col()).find({ id: { $in: ids } }).toArray();
+  },
+  async listExpiredDemo(now: Date) {
+    return (await col()).find({ isDemo: true, demoExpiresAt: { $lt: now } }).toArray();
+  },
+  async remove(id: string) {
+    await (await col()).deleteOne({ id });
   },
 };

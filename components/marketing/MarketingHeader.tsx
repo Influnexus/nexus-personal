@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Logo } from '@/components/app/Logo';
 import { ThemeToggle } from '@/components/app/ThemeToggle';
 import { Button } from '@/components/ui/button';
+import { DemoButton } from '@/components/app/DemoButton';
 
 export function MarketingHeader() {
   return (
@@ -18,6 +19,7 @@ export function MarketingHeader() {
         <div className="flex items-center gap-2">
           <ThemeToggle />
           <Link href="/login"><Button variant="ghost" size="sm">Sign in</Button></Link>
+          <DemoButton size="sm" variant="secondary" label="Try demo" className="hidden sm:inline-flex" />
           <Link href="/register"><Button size="sm" className="rounded-full">Get started</Button></Link>
         </div>
       </div>

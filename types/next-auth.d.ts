@@ -9,6 +9,8 @@ declare module "next-auth" {
       image?: string | null;
       activeOrgId?: string | null;
       role?: string | null;
+      isDemo?: boolean;
+      demoExpiresAt?: string | null;
     };
   }
   interface User {
@@ -16,6 +18,7 @@ declare module "next-auth" {
     email: string;
     name?: string | null;
     image?: string | null;
+    isDemo?: boolean;
   }
 }
 
@@ -24,5 +27,7 @@ declare module "next-auth/jwt" {
     id: string;
     activeOrgId?: string | null;
     role?: string | null;
+    isDemo?: boolean;
+    demoExpiresAt?: string | null;
   }
 }

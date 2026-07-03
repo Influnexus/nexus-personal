@@ -25,6 +25,7 @@ async function ensureIndexes(db: Db) {
   await Promise.all([
     db.collection('users').createIndex({ email: 1 }, { unique: true }),
     db.collection('organizations').createIndex({ slug: 1 }, { unique: true }),
+    db.collection('organizations').createIndex({ isDemo: 1, demoExpiresAt: 1 }),
     db.collection('memberships').createIndex({ userId: 1, organizationId: 1 }, { unique: true }),
     db.collection('memberships').createIndex({ organizationId: 1 }),
     db.collection('invitations').createIndex({ token: 1 }, { unique: true }),

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { MarketingHeader } from '@/components/marketing/MarketingHeader';
 import { Button } from '@/components/ui/button';
+import { DemoButton } from '@/components/app/DemoButton';
 import { ArrowRight, Sparkles, ShieldCheck, Workflow, Layers, Zap, LineChart } from 'lucide-react';
 
 export default function LandingPage() {
@@ -17,18 +18,16 @@ export default function LandingPage() {
             <Sparkles className="h-3.5 w-3.5" /> Introducing the AI Workforce platform
           </div>
           <h1 className="mt-6 text-balance text-5xl font-semibold tracking-tight md:text-7xl">
-            The operating system for the<br className="hidden md:block" />
-            <span className="bg-gradient-to-br from-foreground to-foreground/50 bg-clip-text text-transparent"> AI-native enterprise.</span>
+            Meet NexusAI CFO —<br className="hidden md:block" />
+            <span className="bg-gradient-to-br from-foreground to-foreground/50 bg-clip-text text-transparent"> your AI finance executive.</span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-balance text-base text-muted-foreground md:text-lg">
-            NexusAI gives every business an autonomous AI workforce — secure, governed and built for scale. Onboard your company in minutes, not quarters.
+            Instant cash-flow forecasts, invoice intelligence and a CFO you can chat with 24/7 — no spreadsheets required. Try it with real data in the next 30 seconds, no signup.
           </p>
           <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <DemoButton size="lg" variant="default" className="px-6" label="Try live demo — no signup" />
             <Link href="/register">
-              <Button size="lg" className="rounded-full px-6">Start for free <ArrowRight className="ml-1.5 h-4 w-4" /></Button>
-            </Link>
-            <Link href="/login">
-              <Button size="lg" variant="ghost" className="rounded-full px-6">Sign in</Button>
+              <Button size="lg" variant="outline" className="rounded-full px-6">Start for free <ArrowRight className="ml-1.5 h-4 w-4" /></Button>
             </Link>
           </div>
           <p className="mt-5 text-xs text-muted-foreground">SOC 2 Type II · GDPR ready · 99.99% uptime SLA</p>
