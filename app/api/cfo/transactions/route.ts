@@ -41,9 +41,13 @@ export async function POST(req: NextRequest) {
   const form = await req.formData();
   const file = form.get('file') as File | null;
   if (!file) return NextResponse.json({ error: 'file required' }, { status: 400 });
+  if (!/\.csv$/i.test(file.name) && file.type && !/csv|text\/plain/i.test(file.type)) {
+    return NextResponse.json({ error: 'Please upload a .csv file. Other formats are not supported yet.' }, { status: 400 });
+  }
   const text = await file.text();
+  if (!text.trim()) return NextResponse.json({ error: 'The file appears to be empty.' }, { status: 400 });
   const parsed = Papa.parse<Record<string, string>>(text, { header: true, skipEmptyLines: true });
-  if (parsed.errors.length > 0 && parsed.data.length === 0) return NextResponse.json({ error: 'CSV parse failed' }, { status: 400 });
+  if (parsed.data.length === 0) return NextResponse.json({ error: 'CSV parse failed — no rows found. Check the file has a header row (date, description, vendor, amount).' }, { status: 400 });
 
   const dateKey = (r: any) => Object.keys(r).find(k => /^date|posted|transaction/i.test(k)) || 'date';
   const descKey = (r: any) => Object.keys(r).find(k => /desc|memo|narration/i.test(k)) || 'description';
@@ -51,33 +55,49 @@ export async function POST(req: NextRequest) {
   const amtKey = (r: any) => Object.keys(r).find(k => /^amount|amt|value/i.test(k)) || 'amount';
 
   const rows: NormalizedRow[] = [];
+  let invalidRows = 0;
   for (const r of parsed.data) {
-    const date = toIso(r[dateKey(r)] || ''); if (!date) continue;
+    const date = toIso(r[dateKey(r)] || '');
+    const rawAmt = (r[amtKey(r)] || '').toString().replace(/[,$\s]/g, '');
+    const amount = parseFloat(rawAmt);
+    if (!date || isNaN(amount)) { invalidRows += 1; continue; }
     const description = (r[descKey(r)] || '').trim();
     const vendor = (vendKey(r) ? r[vendKey(r)] : description.split(/[\s\-]+/)[0] || 'Unknown').trim();
-    const raw = (r[amtKey(r)] || '0').toString().replace(/[,$\s]/g, '');
-    const amount = parseFloat(raw); if (isNaN(amount)) continue;
     rows.push({ date, description, vendor, amount });
   }
-  if (rows.length === 0) return NextResponse.json({ error: 'No valid rows' }, { status: 400 });
+  if (rows.length === 0) {
+    return NextResponse.json({ error: `No valid rows found (${invalidRows} row(s) skipped — check date and amount columns).` }, { status: 400 });
+  }
+
+  // Duplicate detection against existing transactions (same date + vendor + amount).
+  const existing = await transactionsRepo.listByOrg(orgId);
+  const existingKeys = new Set(existing.map(t => `${t.date}|${(t.vendor || '').toLowerCase()}|${t.amount}`));
+  const uniqueRows: NormalizedRow[] = [];
+  let duplicateRows = 0;
+  for (const r of rows) {
+    const key = `${r.date}|${(r.vendor || '').toLowerCase()}|${r.amount}`;
+    if (existingKeys.has(key)) { duplicateRows += 1; continue; }
+    existingKeys.add(key); // also de-dupe within the same file
+    uniqueRows.push(r);
+  }
 
   // Batch categorize (limit batches of 25)
   const BATCH = 25;
-  for (let i = 0; i < rows.length; i += BATCH) {
-    const slice = rows.slice(i, i + BATCH).map(r => ({ description: r.description, vendor: r.vendor || '', amount: r.amount }));
+  for (let i = 0; i < uniqueRows.length; i += BATCH) {
+    const slice = uniqueRows.slice(i, i + BATCH).map(r => ({ description: r.description, vendor: r.vendor || '', amount: r.amount }));
     try {
       const cats = await categorizeBatch(slice);
       slice.forEach((_, idx) => {
         const c = cats[idx];
         if (c) {
-          rows[i + idx].category = c.category || 'Other';
-          if (c.vendor) rows[i + idx].vendor = c.vendor;
-        } else { rows[i + idx].category = 'Other'; }
+          uniqueRows[i + idx].category = c.category || 'Other';
+          if (c.vendor) uniqueRows[i + idx].vendor = c.vendor;
+        } else { uniqueRows[i + idx].category = 'Other'; }
       });
-    } catch { slice.forEach((_, idx) => { rows[i + idx].category = 'Other'; }); }
+    } catch { slice.forEach((_, idx) => { uniqueRows[i + idx].category = 'Other'; }); }
   }
 
-  const inserted = await transactionsRepo.insertMany(rows.map(r => ({
+  const inserted = uniqueRows.length > 0 ? await transactionsRepo.insertMany(uniqueRows.map(r => ({
     organizationId: orgId,
     date: r.date,
     description: r.description,
@@ -86,6 +106,12 @@ export async function POST(req: NextRequest) {
     amount: r.amount,
     currency: 'USD',
     source: 'csv' as const,
-  })));
-  return NextResponse.json({ imported: inserted });
+  }))) : 0;
+
+  return NextResponse.json({
+    imported: inserted,
+    skipped: invalidRows,
+    duplicates: duplicateRows,
+    totalRows: parsed.data.length,
+  });
 }

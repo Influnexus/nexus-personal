@@ -1,36 +1,82 @@
 'use client';
-import { useState, useRef } from 'react';
-import useSWR from 'swr';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import useSWR, { mutate as globalMutate } from 'swr';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Upload, Loader2, AlertTriangle, FileText, Receipt } from 'lucide-react';
+import { Upload, Loader2, AlertTriangle, FileText, Receipt, Check, X, ClipboardPaste } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const fetcher = (u: string) => fetch(u).then(r => r.json());
+const ACCEPTED_MIME = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif'];
+
+interface UploadJob { id: string; name: string; status: 'uploading' | 'done' | 'error'; message?: string }
 
 export default function InvoicesPage() {
   const { data, mutate, isLoading } = useSWR('/api/cfo/invoices', fetcher);
   const inv = data?.invoices || [];
-  const [busy, setBusy] = useState(false);
+  const [jobs, setJobs] = useState<UploadJob[]>([]);
+  const [dragActive, setDragActive] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const busy = jobs.some(j => j.status === 'uploading');
 
-  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]; if (!file) return;
-    setBusy(true);
+  const uploadOne = useCallback(async (file: File) => {
+    const id = `${file.name}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    setJobs(prev => [...prev, { id, name: file.name, status: 'uploading' }]);
     try {
+      if (file.size === 0) throw new Error('File is empty');
+      if (/heic|heif/i.test(file.type) || /\.(heic|heif)$/i.test(file.name)) {
+        throw new Error('HEIC photos aren\u2019t supported yet — convert to JPG/PNG first');
+      }
       const fd = new FormData(); fd.append('file', file);
       const res = await fetch('/api/cfo/invoices', { method: 'POST', body: fd });
       const d = await res.json();
-      if (!res.ok) { toast.error(d.error || 'Extraction failed'); return; }
+      if (!res.ok) throw new Error(d.error || 'Extraction failed');
       const anomalies = d.invoice?.anomalies || [];
-      if (anomalies.length > 0) toast.warning(`Invoice extracted with ${anomalies.length} anomaly note(s)`);
+      setJobs(prev => prev.map(j => j.id === id ? { ...j, status: 'done', message: `Extracted ${d.invoice.vendor}` } : j));
+      if (anomalies.length > 0) toast.warning(`${file.name}: extracted with ${anomalies.length} anomaly note(s)`);
       else toast.success(`Extracted invoice from ${d.invoice.vendor}`);
       mutate();
-    } catch (err: any) { toast.error(err.message || 'Upload failed'); }
-    finally { setBusy(false); if (fileRef.current) fileRef.current.value = ''; }
+      globalMutate('/api/cfo/briefing'); // keep the Executive Dashboard in sync automatically
+    } catch (err: any) {
+      setJobs(prev => prev.map(j => j.id === id ? { ...j, status: 'error', message: err.message || 'Upload failed' } : j));
+      toast.error(`${file.name}: ${err.message || 'Upload failed'}`);
+    }
+  }, [mutate]);
+
+  const uploadFiles = useCallback(async (files: FileList | File[]) => {
+    const arr = Array.from(files);
+    if (arr.length === 0) return;
+    // Upload sequentially so progress + toasts are legible for multiple invoices at once.
+    for (const f of arr) await uploadOne(f);
+  }, [uploadOne]);
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    if (e.target.files && e.target.files.length > 0) await uploadFiles(e.target.files);
+    if (fileRef.current) fileRef.current.value = '';
   }
+
+  // Drag & drop
+  const onDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault(); e.stopPropagation(); setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) uploadFiles(e.dataTransfer.files);
+  }, [uploadFiles]);
+
+  // Paste from clipboard (screenshot of an invoice, etc.)
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items; if (!items) return;
+      const files: File[] = [];
+      for (const item of Array.from(items)) {
+        if (item.kind === 'file') { const f = item.getAsFile(); if (f) files.push(f); }
+      }
+      if (files.length > 0) { e.preventDefault(); uploadFiles(files); }
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [uploadFiles]);
 
   const total = inv.reduce((s: number, i: any) => s + (i.amount || 0), 0);
   const overdue = inv.filter((i: any) => i.status === 'overdue').length;
@@ -40,10 +86,39 @@ export default function InvoicesPage() {
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div><h1 className="text-2xl font-semibold tracking-tight md:text-[28px]">Invoices</h1><p className="text-sm text-muted-foreground">Upload PDFs or images — AI extracts vendor, amounts, line items, and anomalies.</p></div>
         <Button onClick={() => fileRef.current?.click()} disabled={busy}>
-          {busy ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Extracting…</> : <><Upload className="mr-2 h-4 w-4" /> Upload invoice</>}
+          {busy ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Extracting…</> : <><Upload className="mr-2 h-4 w-4" /> Upload invoice(s)</>}
         </Button>
-        <input ref={fileRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={onFile} />
+        <input ref={fileRef} type="file" multiple accept="application/pdf,image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={onFile} />
       </div>
+
+      {/* Drag & drop / paste zone */}
+      <div
+        onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+        onDragLeave={() => setDragActive(false)}
+        onDrop={onDrop}
+        className={cn('flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed p-8 text-center transition-colors',
+          dragActive ? 'border-foreground/60 bg-foreground/[0.04]' : 'border-border/70 hover:border-foreground/30')}
+      >
+        <Receipt className="h-6 w-6 text-muted-foreground" />
+        <p className="text-sm font-medium">Drag & drop invoices here</p>
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><ClipboardPaste className="h-3.5 w-3.5" /> or paste a screenshot (Ctrl/Cmd+V) — PDF, PNG, JPG supported, multiple at once</p>
+      </div>
+
+      {jobs.length > 0 && (
+        <Card>
+          <CardContent className="space-y-2 p-4">
+            {jobs.slice().reverse().map(j => (
+              <div key={j.id} className="flex items-center gap-2.5 text-sm">
+                {j.status === 'uploading' && <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />}
+                {j.status === 'done' && <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />}
+                {j.status === 'error' && <X className="h-3.5 w-3.5 shrink-0 text-rose-600 dark:text-rose-400" />}
+                <span className="truncate font-medium">{j.name}</span>
+                {j.message && <span className="truncate text-xs text-muted-foreground">— {j.message}</span>}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-4 md:grid-cols-3">
         <StatTile label="Total invoices" value={inv.length} />

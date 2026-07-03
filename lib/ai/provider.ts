@@ -194,52 +194,63 @@ class EmergentOrchestrator implements LLMOrchestrator {
   }
 
   async *stream(opts: CompleteOptions) {
-    // Streaming still routes through the primary model with retries but no fallback (fallback would require re-streaming from start).
-    const model = opts.model || PRIMARY;
-    if (!breakerAllows(model)) throw new LLMUnavailableError();
-    let attempt = 0;
-    while (attempt <= RETRY_DELAYS_MS.length) {
-      const started = Date.now();
-      try {
-        const key = process.env.EMERGENT_LLM_KEY;
-        if (!key) throw new LLMUnavailableError();
-        const r = await fetch(EMERGENT_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}`, Accept: 'text/event-stream' },
-          body: JSON.stringify(buildBody({ ...opts, stream: true }, model)),
-        });
-        if (!r.ok || !r.body) {
-          const txt = (await r.text().catch(() => '')).slice(0, 300);
-          throw new LLMUpstreamError(r.status, txt, model, Date.now() - started);
-        }
-        const reader = r.body.getReader(); const decoder = new TextDecoder(); let buf = '';
-        while (true) {
-          const { done, value } = await reader.read(); if (done) break;
-          buf += decoder.decode(value, { stream: true });
-          const lines = buf.split('\n'); buf = lines.pop() || '';
-          for (const line of lines) {
-            const t = line.trim(); if (!t.startsWith('data:')) continue;
-            const p = t.slice(5).trim(); if (p === '[DONE]') { breakerRecord(model, true); pushMetric({ ts: Date.now(), model, latencyMs: Date.now() - started, status: 'ok', success: true, provider: 'emergent' }); return; }
-            try {
-              const json = JSON.parse(p);
-              const ch = json.choices?.[0]; const delta = ch?.delta?.content; const tcs = ch?.delta?.tool_calls; const fin = ch?.finish_reason;
-              if (delta || tcs || fin) yield { delta, tool_calls: tcs, finish_reason: fin };
-            } catch { /* ignore malformed */ }
+    // Streaming now falls back across the full model chain (Claude → GPT-5 → Gemini), same as complete().
+    // We only switch models BEFORE any content has been streamed to the client — once a chunk has been sent,
+    // we can't safely restart with a different model without producing garbled/duplicated output.
+    const chain = opts.model ? [opts.model] : MODELS;
+    let lastFailure: any = null;
+    for (const model of chain) {
+      if (!breakerAllows(model)) { lastFailure = new LLMUnavailableError(`Circuit open for ${model}`); continue; }
+      let attempt = 0;
+      let startedStreamingContent = false;
+      while (attempt <= RETRY_DELAYS_MS.length) {
+        const started = Date.now();
+        try {
+          const key = process.env.EMERGENT_LLM_KEY;
+          if (!key) throw new LLMUnavailableError();
+          const r = await fetch(EMERGENT_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}`, Accept: 'text/event-stream' },
+            body: JSON.stringify(buildBody({ ...opts, stream: true }, model)),
+          });
+          if (!r.ok || !r.body) {
+            const txt = (await r.text().catch(() => '')).slice(0, 300);
+            throw new LLMUpstreamError(r.status, txt, model, Date.now() - started);
           }
+          const reader = r.body.getReader(); const decoder = new TextDecoder(); let buf = '';
+          while (true) {
+            const { done, value } = await reader.read(); if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            const lines = buf.split('\n'); buf = lines.pop() || '';
+            for (const line of lines) {
+              const t = line.trim(); if (!t.startsWith('data:')) continue;
+              const p = t.slice(5).trim(); if (p === '[DONE]') { breakerRecord(model, true); pushMetric({ ts: Date.now(), model, latencyMs: Date.now() - started, status: 'ok', success: true, provider: 'emergent' }); return; }
+              try {
+                const json = JSON.parse(p);
+                const ch = json.choices?.[0]; const delta = ch?.delta?.content; const tcs = ch?.delta?.tool_calls; const fin = ch?.finish_reason;
+                if (delta) startedStreamingContent = true;
+                if (delta || tcs || fin) yield { delta, tool_calls: tcs, finish_reason: fin };
+              } catch { /* ignore malformed */ }
+            }
+          }
+          breakerRecord(model, true);
+          pushMetric({ ts: Date.now(), model, latencyMs: Date.now() - started, status: 'ok', success: true, provider: 'emergent' });
+          return;
+        } catch (e: any) {
+          const status = e instanceof LLMUpstreamError ? e.status : 'error';
+          const retriable = status === 'error' || (typeof status === 'number' && (status === 408 || status === 429 || status >= 500));
+          console.warn(`[LLM stream] ${model} attempt ${attempt + 1} failed status=${status} reason=${(e.message || '').slice(0, 200)}`);
+          pushMetric({ ts: Date.now(), model, latencyMs: e.latencyMs ?? (Date.now() - started), status, success: false, errorReason: e.message?.slice(0, 300), provider: 'emergent' });
+          lastFailure = e;
+          if (startedStreamingContent) { breakerRecord(model, false); throw new LLMUnavailableError(); }
+          if (!retriable || attempt === RETRY_DELAYS_MS.length) { breakerRecord(model, false); break; }
+          await sleep(RETRY_DELAYS_MS[attempt]);
+          attempt += 1;
         }
-        breakerRecord(model, true);
-        pushMetric({ ts: Date.now(), model, latencyMs: Date.now() - started, status: 'ok', success: true, provider: 'emergent' });
-        return;
-      } catch (e: any) {
-        const status = e instanceof LLMUpstreamError ? e.status : 'error';
-        const retriable = status === 'error' || (typeof status === 'number' && (status === 408 || status === 429 || status >= 500));
-        console.warn(`[LLM stream] ${model} attempt ${attempt + 1} failed status=${status}`);
-        pushMetric({ ts: Date.now(), model, latencyMs: e.latencyMs ?? (Date.now() - started), status, success: false, errorReason: e.message?.slice(0, 300), provider: 'emergent' });
-        if (!retriable || attempt === RETRY_DELAYS_MS.length) { breakerRecord(model, false); throw new LLMUnavailableError(); }
-        await sleep(RETRY_DELAYS_MS[attempt]);
-        attempt += 1;
       }
+      // exhausted retries for this model without ever streaming content — try next model in chain
     }
+    console.error(`[LLM stream] all providers failed — lastReason=${lastFailure?.message?.slice(0, 200) || 'unknown'}`);
     throw new LLMUnavailableError();
   }
 }

@@ -1,11 +1,12 @@
 'use client';
-import { useState, useRef } from 'react';
-import useSWR from 'swr';
+import { useState, useRef, useCallback } from 'react';
+import useSWR, { mutate as globalMutate } from 'swr';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
 import { Upload, Loader2, BarChart3 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const fetcher = (u: string) => fetch(u).then(r => r.json());
 
@@ -13,20 +14,34 @@ export default function TransactionsPage() {
   const { data, mutate, isLoading } = useSWR('/api/cfo/transactions', fetcher);
   const txs = data?.transactions || [];
   const [busy, setBusy] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]; if (!file) return;
+  const doImport = useCallback(async (file: File) => {
+    if (!file) return;
+    if (!/\.csv$/i.test(file.name)) { toast.error('Please upload a .csv file.'); return; }
     setBusy(true);
     try {
       const fd = new FormData(); fd.append('file', file);
       const res = await fetch('/api/cfo/transactions', { method: 'POST', body: fd });
       const d = await res.json();
       if (!res.ok) { toast.error(d.error || 'Import failed'); return; }
-      toast.success(`Imported ${d.imported} transactions — AI categorized.`);
+      const parts = [`Imported ${d.imported} transaction${d.imported === 1 ? '' : 's'}`];
+      if (d.duplicates > 0) parts.push(`${d.duplicates} duplicate${d.duplicates === 1 ? '' : 's'} skipped`);
+      if (d.skipped > 0) parts.push(`${d.skipped} invalid row${d.skipped === 1 ? '' : 's'} skipped`);
+      toast.success(parts.join(' — ') + '. AI categorized automatically.');
       mutate();
+      globalMutate('/api/cfo/briefing'); // keep the Executive Dashboard in sync automatically
     } finally { setBusy(false); if (fileRef.current) fileRef.current.value = ''; }
+  }, [mutate]);
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; if (file) await doImport(file);
   }
+  const onDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault(); e.stopPropagation(); setDragActive(false);
+    const file = e.dataTransfer.files?.[0]; if (file) doImport(file);
+  }, [doImport]);
 
   const inflow = txs.filter((t: any) => t.amount > 0).reduce((s: number, t: any) => s + t.amount, 0);
   const outflow = -txs.filter((t: any) => t.amount < 0).reduce((s: number, t: any) => s + t.amount, 0);
@@ -39,6 +54,18 @@ export default function TransactionsPage() {
           {busy ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Importing…</> : <><Upload className="mr-2 h-4 w-4" /> Import CSV</>}
         </Button>
         <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={onFile} />
+      </div>
+
+      <div
+        onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+        onDragLeave={() => setDragActive(false)}
+        onDrop={onDrop}
+        className={cn('flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed p-8 text-center transition-colors',
+          dragActive ? 'border-foreground/60 bg-foreground/[0.04]' : 'border-border/70 hover:border-foreground/30')}
+      >
+        <BarChart3 className="h-6 w-6 text-muted-foreground" />
+        <p className="text-sm font-medium">Drag & drop a CSV here</p>
+        <p className="text-xs text-muted-foreground">Columns: date, description, vendor, amount (extra columns are ignored)</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">

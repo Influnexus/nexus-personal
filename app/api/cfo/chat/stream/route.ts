@@ -7,6 +7,7 @@ import { llm, LLMUnavailableError } from '@/lib/ai/provider';
 import { toolSpecs, runTool } from '@/lib/ai/tools';
 import { toolCache } from '@/lib/ai/tool-cache';
 import { CFO_SYSTEM_PROMPT } from '@/lib/ai/prompts';
+import { compactMessages } from '@/lib/ai/context';
 import { conversationsRepo } from '@/lib/repositories/conversations';
 import { v4 as uuid } from 'uuid';
 
@@ -50,7 +51,8 @@ export async function POST(req: NextRequest) {
       try {
         send('meta', { conversationId: convo!.id });
         const sys = { role: 'system' as const, content: CFO_SYSTEM_PROMPT };
-        const ctxMsgs: any[] = [sys, ...messages];
+        const compacted = await compactMessages(messages);
+        const ctxMsgs: any[] = [sys, ...compacted];
         const usedTools: { name: string; result: any }[] = [];
         let finalAnswer = '';
 
@@ -78,12 +80,17 @@ export async function POST(req: NextRequest) {
           if (decision.content) {
             // We already have the final answer from this round (no tool calls). Stream it as one chunk for fidelity
             // plus we restart a streaming pass to feel live.
+            // IMPORTANT: Anthropic (via the Emergent gateway) rejects requests with 400 if the message history
+            // contains prior tool_calls/tool messages but no `tools` param is supplied on THIS call. Since every
+            // CFO answer almost always follows a tool round, `tools` must be passed here too. tool_choice:'none'
+            // forces a direct text answer (we've already decided no more tools are needed).
             const streamMsgs = [...ctxMsgs];
             send('answer_start', {});
             try {
-              for await (const chunk of llm.stream({ messages: streamMsgs, temperature: 0.2, max_tokens: 1500 })) {
+              for await (const chunk of llm.stream({ messages: streamMsgs, tools: toolSpecs(), tool_choice: 'none', temperature: 0.2, max_tokens: 1500 })) {
                 if (chunk.delta) { finalAnswer += chunk.delta; send('token', { delta: chunk.delta }); }
               }
+              if (!finalAnswer) { finalAnswer = decision.content; send('token', { delta: decision.content }); }
             } catch {
               // Fallback to the already-known content.
               finalAnswer = decision.content;

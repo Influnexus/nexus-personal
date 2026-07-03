@@ -2,6 +2,7 @@ import { llm, ChatMessage } from './provider';
 import { toolSpecs, runTool, ToolContext } from './tools';
 import { toolCache } from './tool-cache';
 import { CFO_SYSTEM_PROMPT } from './prompts';
+import { compactMessages } from './context';
 
 export interface AgentTrace {
   toolCalls: { name: string; args: string; result: any; cached?: boolean }[];
@@ -13,7 +14,8 @@ export async function runCfoAgent(
   opts?: { systemPrompt?: string; maxSteps?: number; temperature?: number }
 ): Promise<AgentTrace> {
   const system: ChatMessage = { role: 'system', content: opts?.systemPrompt || CFO_SYSTEM_PROMPT };
-  const messages: ChatMessage[] = [system, ...userMessages];
+  const compacted = await compactMessages(userMessages);
+  const messages: ChatMessage[] = [system, ...compacted];
   const trace: AgentTrace = { toolCalls: [], finalAnswer: '' };
   const maxSteps = opts?.maxSteps ?? 6;
 
