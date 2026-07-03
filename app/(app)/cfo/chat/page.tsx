@@ -1,6 +1,7 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
 import useSWR from 'swr';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -12,7 +13,7 @@ import { cn } from '@/lib/utils';
 const fetcher = (u: string) => fetch(u).then(r => r.json());
 
 interface ToolStep { name: string; label: string; status: 'running' | 'done' }
-interface UIMsg { role: 'user' | 'assistant'; content: string; tools?: ToolStep[]; streaming?: boolean; aiUnavailable?: boolean }
+interface UIMsg { role: 'user' | 'assistant'; content: string; tools?: ToolStep[]; streaming?: boolean; aiUnavailable?: boolean; usageLimited?: boolean }
 
 const SUGGESTIONS = [
   { q: 'What is my cash runway right now?', hint: 'Cash & liquidity' },
@@ -77,8 +78,9 @@ export default function ChatPage() {
           else if (type === 'done') { update(p => ({ ...p, streaming: false })); mutateConvos(); }
           else if (type === 'error') {
             const isAI = data.code === 'ai_unavailable';
+            const isLimit = data.code === 'usage_limit';
             const banner = isAI ? "We're temporarily unable to reach the AI. Your financial analysis is complete. Please try again in a few moments." : (data.message || 'AI error');
-            update(p => ({ ...p, content: banner, streaming: false, aiUnavailable: isAI }));
+            update(p => ({ ...p, content: banner, streaming: false, aiUnavailable: isAI, usageLimited: isLimit }));
           }
         }
       }
@@ -191,9 +193,12 @@ function AssistantBubble({ msg }: { msg: UIMsg }) {
           </div>
         )}
         {(body || !msg.streaming) && (
-          <div className={cn('rounded-2xl rounded-tl-sm border px-4 py-3 text-[14.5px] leading-relaxed', msg.aiUnavailable ? 'border-amber-500/40 bg-amber-500/[0.06]' : 'bg-card')}>
+          <div className={cn('rounded-2xl rounded-tl-sm border px-4 py-3 text-[14.5px] leading-relaxed', (msg.aiUnavailable || msg.usageLimited) ? 'border-amber-500/40 bg-amber-500/[0.06]' : 'bg-card')}>
             <Markdown text={body || ''} />
             {msg.streaming && <span className="ml-0.5 inline-block h-3.5 w-1 animate-pulse bg-foreground/70 align-middle" />}
+            {msg.usageLimited && (
+              <div className="mt-3"><Link href="/billing"><Button size="sm" className="rounded-full">View plans</Button></Link></div>
+            )}
           </div>
         )}
         {msg.streaming && !body && !hasTools && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Thinking…</div>}

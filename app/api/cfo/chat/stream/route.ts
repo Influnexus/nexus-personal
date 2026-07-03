@@ -9,6 +9,7 @@ import { toolCache } from '@/lib/ai/tool-cache';
 import { CFO_SYSTEM_PROMPT } from '@/lib/ai/prompts';
 import { compactMessages } from '@/lib/ai/context';
 import { memoryService } from '@/lib/memory/service';
+import { usageService } from '@/lib/billing/usage.service';
 import { conversationsRepo } from '@/lib/repositories/conversations';
 import { v4 as uuid } from 'uuid';
 
@@ -36,6 +37,19 @@ export async function POST(req: NextRequest) {
 
   const { messages, conversationId } = await req.json();
   if (!Array.isArray(messages) || messages.length === 0) return new Response('messages required', { status: 400 });
+
+  // Usage gating — checked BEFORE any expensive LLM call so blocked usage costs nothing.
+  const entitlement = await usageService.checkEntitlement(orgId, 'ai_messages');
+  if (!entitlement.allowed) {
+    const encoder = new TextEncoder();
+    const gated = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(`event: error\ndata: ${JSON.stringify({ code: 'usage_limit', message: entitlement.reason })}\n\n`));
+        controller.close();
+      },
+    });
+    return new Response(gated, { headers: { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache' } });
+  }
 
   let convo = conversationId ? await conversationsRepo.findById(conversationId) : null;
   if (!convo) {
@@ -113,6 +127,9 @@ export async function POST(req: NextRequest) {
 
         send('done', { conversationId: convo!.id, toolCalls: usedTools.map(t => ({ name: t.name })) });
         close();
+
+        // Record real usage for billing/gating purposes.
+        usageService.record(orgId, 'ai_messages').catch(() => {});
 
         // Best-effort, non-blocking memory extraction from this turn's user message — never invents
         // facts, only captures what the user explicitly stated (business/goal/decision/preference).

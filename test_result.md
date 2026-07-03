@@ -1218,6 +1218,208 @@ backend:
           
           **Executive Memory System is PRODUCTION READY - All 6 test scenarios passed with 100% success rate.**
 
+backend:
+  - task: "Sprint 2.7 Phase 4A - Billing architecture (no payment keys required)"
+    implemented: true
+    working: true
+    file: "lib/billing/**, app/api/billing/**, app/api/webhooks/**, app/(app)/billing/page.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Built the full provider-agnostic billing architecture WITHOUT requiring Stripe/Razorpay keys
+          (Phase 4A per explicit user instruction — Phase 4B will wire real payment processing once keys
+          are provided). Nothing here is fake/simulated payment: trials are genuinely free (no charge
+          logic exists to fake), and any action that WOULD require a real payment provider (checkout,
+          customer portal) returns an honest 503 "not_configured" message rather than pretending to
+          succeed.
+          ARCHITECTURE:
+          - lib/billing/plans.ts: single source of truth for Starter ($59/mo, ₹4999/mo)/Growth ($199/mo,
+            ₹14999/mo)/Enterprise (custom) pricing, yearly discount (20%), and usage limits per plan.
+          - lib/billing/providers/{types,stripe.provider,razorpay.provider,router}.ts: PaymentProvider
+            interface implemented by both StripeProvider and RazorpayProvider (real SDK calls, using the
+            official `stripe` and `razorpay` npm packages per their integration playbooks) — isConfigured()
+            returns false until STRIPE_SECRET_KEY / RAZORPAY_KEY_ID+SECRET env vars are set. router.ts
+            picks Razorpay for region='IN', Stripe otherwise; Enterprise never reaches a provider (routes
+            to Contact Sales / mailto link instead).
+          - lib/billing/subscription.service.ts: startTrial (real, free, 14 days, no payment collected),
+            changePlan (free during trial), cancel/resume (cancelAtPeriodEnd or immediate), and
+            getEffectiveSubscription() which flips 'trialing' -> 'trial_expired' in-place once trialEndsAt
+            passes (the "trial expiration logic" + "subscription middleware" pattern — called at the top
+            of every gated route since Next.js edge middleware can't hit MongoDB).
+          - lib/billing/usage.service.ts: REAL usage metering (not simulated) for ai_messages,
+            invoices_processed, csv_imports per org per calendar month. checkEntitlement() is the feature
+            gate: free tier (no subscription) gets 20 AI messages/5 invoices/1 CSV import per month; higher
+            limits once trialing/active. Wired into POST /api/cfo/chat/stream (blocks BEFORE the LLM call,
+            costs nothing when blocked), POST /api/cfo/invoices, POST /api/cfo/transactions.
+          - lib/billing/invoice.service.ts + email-templates.ts: billing invoice history (genuinely empty
+            until Phase 4B since trials are free) + tax invoice HTML renderer; email template content
+            generators for trial-started/ending/payment-failed/subscription-confirmed/receipt (NOT sent —
+            no email provider configured, kept as pure functions ready to wire to a mailer).
+          - API: GET /api/billing/subscription (sub + usage + plan catalog), POST /api/billing/trial,
+            PATCH /api/billing/plan, POST /api/billing/cancel, POST /api/billing/resume,
+            GET /api/billing/invoices, GET /api/billing/payment-methods, POST /api/billing/checkout
+            (503 not_configured today), POST /api/billing/portal (503 today), POST /api/webhooks/stripe
+            and /api/webhooks/razorpay (signature verification + idempotent event processing skeleton,
+            gracefully no-ops with 200 while unconfigured).
+          - Billing page (/billing) fully rewritten from the Sprint-1 static stub: region toggle
+            (India/Razorpay vs International/Stripe, best-effort auto-detected via timezone),
+            monthly/yearly toggle, current plan card with trial countdown, usage dashboard (3 metrics with
+            progress bars), plan comparison grid, invoice history, payment methods section — no
+            placeholders, every button does something real (start trial / change plan / cancel / resume /
+            attempt checkout with honest not-configured message).
+          PLEASE TEST (use the demo-mode flow: GET /api/auth/csrf -> POST /api/auth/callback/demo):
+          1. GET /api/billing/subscription with NO subscription yet -> subscription:null, usage shows free
+             tier limits (ai_messages limit 20, invoices_processed limit 5, csv_imports limit 1), plans
+             object has starter/growth/enterprise.
+          2. POST /api/billing/trial {plan:"starter", interval:"monthly", region:"INTL"} -> 200, creates a
+             subscription with status:"trialing", trialEndsAt ~14 days out, provider:null (no payment).
+          3. POST /api/billing/trial again (same org) -> 400 (already has a subscription).
+          4. PATCH /api/billing/plan {plan:"growth", interval:"monthly"} -> 200, subscription.plan is now
+             growth (free change during trial, no fake charge).
+          5. POST /api/billing/cancel {immediate:false} -> 200, cancelAtPeriodEnd:true. Then
+             POST /api/billing/resume -> 200, cancelAtPeriodEnd:false.
+          6. POST /api/billing/cancel {immediate:true} -> 200, status:"canceled".
+          7. GET /api/billing/invoices and GET /api/billing/payment-methods -> both return empty arrays
+             (genuinely empty, not fake data).
+          8. POST /api/billing/checkout {plan:"starter", interval:"monthly", region:"INTL"} -> 503 with
+             error:"not_configured" and a clear human message (NOT a fake success/redirect).
+          9. POST /api/billing/portal -> 503 not_configured (no live provider customer exists yet).
+          10. Usage gating end-to-end with the CHEAPEST limit (csv_imports, free limit=1): with a FRESH
+              demo session (no subscription), upload one small valid CSV via POST /api/cfo/transactions ->
+              succeeds (200). Immediately upload a second CSV -> expect 402 with error:"usage_limit" and a
+              clear upgrade message. Confirm GET /api/billing/subscription now shows csv_imports used:1.
+          11. POST /api/webhooks/stripe and POST /api/webhooks/razorpay with an arbitrary JSON body (no
+              valid signature) -> both return 200 {received:true, note: "... not configured"} (graceful,
+              never crashes) since no webhook secrets are configured yet.
+          12. Unauthenticated GET /api/billing/subscription, POST /api/billing/trial, POST/api/billing/cancel
+              all return 401.
+          13. POST /api/billing/trial {plan:"enterprise", ...} -> 400 (Enterprise requires Contact Sales,
+              not self-serve trial).
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ ALL 16 BILLING TESTS PASSED (100%) - Sprint 2.7 Phase 4A Complete
+          
+          **COMPREHENSIVE BACKEND TESTING PERFORMED:**
+          
+          **Test Environment:**
+          - Base URL: https://nexus-enterprise-ai-2.preview.emergentagent.com
+          - Authentication: Demo mode flow (GET /api/auth/csrf → POST /api/auth/callback/demo)
+          - Test script: /app/backend_test_billing.py
+          
+          **Test Results:**
+          
+          1. ✅ GET /api/billing/subscription (no subscription) - PASS
+             - subscription = null ✓
+             - usage.usage array with 3 items ✓
+             - Free tier limits correct: ai_messages=20, invoices_processed=5, csv_imports=1 ✓
+             - plans object has starter/growth/enterprise keys ✓
+          
+          2. ✅ POST /api/billing/trial (starter/monthly/INTL) - PASS
+             - Returns 200 ✓
+             - subscription.status = 'trialing' ✓
+             - subscription.provider = null ✓
+             - trialEndsAt ~14 days from now ✓
+          
+          3. ✅ POST /api/billing/trial (duplicate attempt) - PASS
+             - Returns 400 ✓
+             - Error: "This organization already has a subscription. Use upgrade/downgrade instead." ✓
+          
+          4. ✅ PATCH /api/billing/plan (change to growth) - PASS
+             - Returns 200 ✓
+             - subscription.plan = 'growth' ✓
+          
+          5. ✅ POST /api/billing/cancel (immediate=false) - PASS
+             - Returns 200 ✓
+             - cancelAtPeriodEnd = true ✓
+          
+          6. ✅ POST /api/billing/resume - PASS
+             - Returns 200 ✓
+             - cancelAtPeriodEnd = false ✓
+          
+          7. ✅ POST /api/billing/cancel (immediate=true) - PASS
+             - Returns 200 ✓
+             - status = 'canceled' ✓
+          
+          8. ✅ GET /api/billing/invoices - PASS
+             - Returns 200 ✓
+             - invoices = [] (empty, not fake data) ✓
+          
+          9. ✅ GET /api/billing/payment-methods - PASS
+             - Returns 200 ✓
+             - paymentMethods = [] (empty, not fake data) ✓
+          
+          10. ✅ POST /api/billing/checkout (not configured) - PASS
+              - Returns 503 ✓
+              - error = 'not_configured' ✓
+              - message = 'Payment processing (stripe) is being finalized. You can continue on your free trial — we'll notify you when checkout is available.' ✓
+              - NO fake checkout URL or 200 success ✓
+          
+          11. ✅ POST /api/billing/portal (not configured) - PASS
+              - Returns 503 ✓
+              - error = 'not_configured' ✓
+              - message = 'Billing portal will be available once payment processing is connected. Manage your plan directly from this Billing page for now.' ✓
+              - NO fake portal URL ✓
+          
+          12. ✅ Usage gating (CSV import limit) - PASS
+              - First CSV upload: 200 success ✓
+              - Second CSV upload: 402 with error='usage_limit' ✓
+              - Message: 'You've reached the free-tier limit for this feature. Start a free trial to unlock more.' ✓
+              - GET /api/billing/subscription shows csv_imports used=1, limit=1 ✓
+          
+          13. ✅ POST /api/webhooks/stripe (no signature) - PASS
+              - Returns 200 ✓
+              - note = 'Stripe not configured' ✓
+              - Does NOT crash/500 ✓
+          
+          14. ✅ POST /api/webhooks/razorpay (no signature) - PASS
+              - Returns 200 ✓
+              - note = 'Razorpay not configured' ✓
+              - Does NOT crash/500 ✓
+          
+          15. ✅ Unauthenticated access - PASS
+              - GET /api/billing/subscription → 401 ✓
+              - POST /api/billing/trial → 401 ✓
+              - POST /api/billing/cancel → 401 ✓
+          
+          16. ✅ POST /api/billing/trial (enterprise plan) - PASS
+              - Returns 400 ✓
+              - Enterprise trial blocked (Zod validation rejects at schema level) ✓
+              - Note: Error message is "Invalid input" (Zod) rather than "Enterprise requires Contact Sales" (service layer), but functionality is correct - enterprise trials are properly blocked
+          
+          **KEY FINDINGS:**
+          
+          ✅ **No fake payments:** All endpoints that require payment providers (checkout, portal) correctly return 503 "not_configured" with clear human-readable messages. NO fake success responses.
+          
+          ✅ **Real usage metering:** Usage gating is working correctly. Free tier limits are enforced (csv_imports limit=1 tested). Second upload correctly returns 402 with usage_limit error.
+          
+          ✅ **Subscription lifecycle:** Trial start, plan changes, cancellation (immediate and at period end), and resume all working correctly.
+          
+          ✅ **Authentication:** All billing endpoints properly require authentication (401 for unauthenticated requests).
+          
+          ✅ **Webhook architecture:** Both Stripe and Razorpay webhook endpoints gracefully handle requests when not configured (200 with note), never crash.
+          
+          ✅ **Data integrity:** Invoices and payment methods return genuinely empty arrays (not fake data).
+          
+          **MINOR NOTE:**
+          - Test 16 (Enterprise trial blocking): Functionality is correct (enterprise trials are blocked with 400), but error message comes from Zod validation ("Invalid input") rather than the service layer ("Enterprise requires Contact Sales"). This is acceptable - the blocking works correctly, just at a different layer.
+          
+          **PRODUCTION READINESS: ✅ READY FOR PHASE 4A**
+          
+          The billing architecture is fully functional and ready for Phase 4A deployment. All core features work correctly:
+          - Subscription management (trial, plan changes, cancellation, resume)
+          - Usage metering and gating
+          - Graceful "not configured" responses for payment provider endpoints
+          - Proper authentication and authorization
+          - Webhook infrastructure ready for Phase 4B
+          
+          No critical issues found. The architecture is solid and ready for real payment provider integration in Phase 4B.
+
+
 metadata:
   created_by: "main_agent"
   version: "1.0"

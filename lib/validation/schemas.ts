@@ -36,3 +36,18 @@ export const memoryUpdateSchema = z.object({
   label: z.string().min(1).max(120).optional(),
   value: z.string().min(1).max(500).optional(),
 });
+
+export const trialStartSchema = z.object({
+  plan: z.enum(['starter', 'growth']),
+  interval: z.enum(['monthly', 'yearly']),
+  region: z.enum(['IN', 'INTL']),
+});
+
+export const planChangeSchema = z.object({
+  plan: z.enum(['starter', 'growth']),
+  interval: z.enum(['monthly', 'yearly']),
+});
+
+export const cancelSchema = z.object({
+  immediate: z.boolean().optional(),
+});

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { invoicesRepo } from '@/lib/repositories/invoices';
 import { llm } from '@/lib/ai/provider';
+import { usageService } from '@/lib/billing/usage.service';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -19,6 +20,9 @@ export async function POST(req: NextRequest) {
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const orgId = session.user.activeOrgId;
   if (!orgId) return NextResponse.json({ error: 'No active organization' }, { status: 400 });
+
+  const entitlement = await usageService.checkEntitlement(orgId, 'invoices_processed');
+  if (!entitlement.allowed) return NextResponse.json({ error: 'usage_limit', message: entitlement.reason }, { status: 402 });
 
   const form = await req.formData();
   const file = form.get('file') as File | null;
@@ -105,5 +109,6 @@ export async function POST(req: NextRequest) {
     uploadedBy: session.user.id,
   });
 
+  usageService.record(orgId, 'invoices_processed').catch(() => {});
   return NextResponse.json({ invoice: inv });
 }

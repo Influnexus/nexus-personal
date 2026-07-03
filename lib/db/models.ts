@@ -73,3 +73,84 @@ export interface MemoryDoc {
   createdAt: Date;
   updatedAt: Date;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Billing — provider-agnostic (Stripe + Razorpay). Never store raw card data; only provider
+// references (customer/subscription/payment-method IDs) and metadata.
+// ---------------------------------------------------------------------------------------------
+export type PlanId = 'starter' | 'growth' | 'enterprise';
+export type BillingInterval = 'monthly' | 'yearly';
+export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'trial_expired' | 'incomplete';
+export type BillingProviderId = 'stripe' | 'razorpay' | 'manual';
+
+export interface SubscriptionDoc {
+  id: string;
+  organizationId: string;
+  plan: PlanId;
+  interval: BillingInterval;
+  status: SubscriptionStatus;
+  provider: BillingProviderId | null;
+  providerCustomerId?: string | null;
+  providerSubscriptionId?: string | null;
+  trialStartedAt?: Date | null;
+  trialEndsAt?: Date | null;
+  currentPeriodStart?: Date | null;
+  currentPeriodEnd?: Date | null;
+  cancelAtPeriodEnd?: boolean;
+  canceledAt?: Date | null;
+  region?: 'IN' | 'INTL';
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface BillingInvoiceDoc {
+  id: string;
+  organizationId: string;
+  subscriptionId: string;
+  provider: BillingProviderId;
+  providerInvoiceId?: string | null;
+  amount: number;
+  currency: string;
+  taxAmount?: number;
+  status: 'paid' | 'open' | 'void' | 'uncollectible';
+  periodStart?: Date | null;
+  periodEnd?: Date | null;
+  pdfUrl?: string | null;
+  issuedAt: Date;
+  createdAt: Date;
+}
+
+export type UsageMetric = 'ai_messages' | 'invoices_processed' | 'csv_imports';
+
+export interface UsageRecordDoc {
+  id: string;
+  organizationId: string;
+  period: string; // YYYY-MM
+  metric: UsageMetric;
+  count: number;
+  updatedAt: Date;
+}
+
+export interface PaymentMethodDoc {
+  id: string;
+  organizationId: string;
+  provider: BillingProviderId;
+  brand?: string;
+  last4?: string;
+  expMonth?: number;
+  expYear?: number;
+  isDefault: boolean;
+  createdAt: Date;
+}
+
+export interface WebhookEventDoc {
+  id: string;
+  provider: BillingProviderId;
+  eventId: string; // provider's event id, for idempotency
+  type: string;
+  payload: any;
+  status: 'received' | 'processed' | 'failed';
+  error?: string | null;
+  createdAt: Date;
+  processedAt?: Date | null;
+}

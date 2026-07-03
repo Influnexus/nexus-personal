@@ -32,5 +32,10 @@ async function ensureIndexes(db: Db) {
     db.collection('invitations').createIndex({ organizationId: 1, email: 1 }),
     db.collection('audit_logs').createIndex({ organizationId: 1, createdAt: -1 }),
     db.collection('memories').createIndex({ organizationId: 1, category: 1 }),
+    db.collection('subscriptions').createIndex({ organizationId: 1 }, { unique: true }),
+    db.collection('billing_invoices').createIndex({ organizationId: 1, issuedAt: -1 }),
+    db.collection('usage_records').createIndex({ organizationId: 1, metric: 1, period: 1 }, { unique: true }),
+    db.collection('payment_methods').createIndex({ organizationId: 1 }),
+    db.collection('webhook_events').createIndex({ provider: 1, eventId: 1 }, { unique: true }),
   ]);
 }

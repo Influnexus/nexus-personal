@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { transactionsRepo } from '@/lib/repositories/transactions';
 import { llm } from '@/lib/ai/provider';
+import { usageService } from '@/lib/billing/usage.service';
 import Papa from 'papaparse';
 
 export const runtime = 'nodejs';
@@ -37,6 +38,9 @@ export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const orgId = session.user.activeOrgId; if (!orgId) return NextResponse.json({ error: 'No active org' }, { status: 400 });
+
+  const entitlement = await usageService.checkEntitlement(orgId, 'csv_imports');
+  if (!entitlement.allowed) return NextResponse.json({ error: 'usage_limit', message: entitlement.reason }, { status: 402 });
 
   const form = await req.formData();
   const file = form.get('file') as File | null;
@@ -108,6 +112,7 @@ export async function POST(req: NextRequest) {
     source: 'csv' as const,
   }))) : 0;
 
+  usageService.record(orgId, 'csv_imports').catch(() => {});
   return NextResponse.json({
     imported: inserted,
     skipped: invalidRows,
