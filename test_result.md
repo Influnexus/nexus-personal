@@ -473,6 +473,44 @@ frontend:
           **OVERALL ASSESSMENT:**
           The frontend is production-ready with excellent UX, responsive design, and functional flows. All core features work correctly. Minor issues are related to testing environment limitations, not application bugs.
 
+backend:
+  - task: "Sprint 2.7 Phase 1 - Demo Mode (no-signup ephemeral workspace)"
+    implemented: true
+    working: true
+    file: "lib/services/demo.service.ts, auth.ts, app/api/demo/convert/route.ts, app/(app)/cfo/scenario/page.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Implemented fully-interactive demo mode: clicking "Try Demo" (landing page hero + header) signs in via a
+          new NextAuth Credentials provider (id: 'demo') which creates an ephemeral user + org (isDemo:true,
+          demoExpiresAt: now+24h) + seeds realistic transactions/invoices (reuses seedService), then signs the
+          visitor in through the normal JWT session flow (activeOrgId set immediately, no re-login needed).
+          All existing /api/cfo/* endpoints work unmodified for demo orgs. Added DemoBanner (shown across app
+          layout when session.user.isDemo) with live countdown + "Create free account to save your work" modal
+          -> POST /api/demo/convert converts the ephemeral user in-place (same org/data preserved) to a real
+          account. Added lazy cleanup (demoService.cleanupExpired, swept on every new demo start) to garbage
+          collect expired (>24h) demo orgs/users/transactions/invoices/conversations/memberships since no cron
+          is available. Also added a basic client-side Scenario Simulator (/cfo/scenario) with revenue/expense
+          sliders recomputing the cash forecast instantly, no extra backend/LLM cost.
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ 9/9 SMOKE TESTS PASSED
+          1. GET /api/auth/csrf -> 200
+          2. POST /api/auth/callback/demo -> demo session created (cookie set)
+          3. GET /api/auth/session -> isDemo=true, activeOrgId set, demoExpiresAt ~24h future
+          4. GET /api/cfo/briefing -> kpis/health/forecast/briefing all populated immediately
+          5. POST /api/cfo/chat/stream -> SSE stream with full event sequence incl. 'done'
+          6. POST /api/cfo/transactions (CSV) -> 3 rows imported
+          7. POST /api/demo/convert -> 200, user/org updated in-place, data preserved
+          8. Duplicate email on convert -> 400 correctly rejected
+          9. Unauthenticated /api/demo/convert -> 401
+          Demo Mode is production-ready. Test script saved at backend_test_demo.py.
+
 metadata:
   created_by: "main_agent"
   version: "1.0"
