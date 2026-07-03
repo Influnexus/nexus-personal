@@ -21,7 +21,11 @@ export function DemoButton({ className, size = 'lg', variant = 'outline', label 
   const handleClick = async () => {
     setLoading(true);
     try {
-      const res = await signIn('demo', { redirect: false });
+      // Fetch CSRF token first (required for NextAuth v5 Credentials provider)
+      const csrfRes = await fetch('/api/auth/csrf');
+      const { csrfToken } = await csrfRes.json();
+      
+      const res = await signIn('demo', { redirect: false, csrfToken });
       if (!res || res.error) {
         toast.error('Could not start the demo. Please try again.');
         setLoading(false);
