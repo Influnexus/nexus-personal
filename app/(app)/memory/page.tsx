@@ -32,7 +32,7 @@ const CATEGORY_META: Record<Category, { label: string; icon: any; hint: string; 
 const ORDER: Category[] = ['business', 'financial', 'goal', 'decision', 'preference'];
 
 export default function MemoryPage() {
-  const { data, mutate, isLoading } = useSWR('/api/memory', fetcher);
+  const { data, mutate, isLoading } = useSWR('/api/memory', fetcher, { revalidateOnMount: true, revalidateOnFocus: true, dedupingInterval: 0 });
   const grouped = data?.memories || { business: [], financial: [], goal: [], decision: [], preference: [] };
   const [addOpen, setAddOpen] = useState<Category | null>(null);
   const [form, setForm] = useState({ label: '', value: '' });

@@ -57,6 +57,7 @@ export const memoryService = {
         + '- preference: how the user wants to be communicated with (currency display, reporting style, tone, units).\n'
         + 'Return ONLY JSON: {"memories":[{"category":"business|financial|goal|decision|preference","label":"short title (<=6 words)","value":"the stated fact/detail, concise"}]}\n'
         + 'If nothing qualifies, return {"memories":[]}.';
+      console.log(`[memory] extracting from turn, org=${organizationId}, textLen=${userText.length}`);
       const res = await llm.complete({
         messages: [{ role: 'system', content: sys }, { role: 'user', content: userText.slice(0, 4000) }],
         response_format: { type: 'json_object' },
@@ -74,14 +75,15 @@ export const memoryService = {
         if (existing) {
           await memoriesRepo.update(existing.id, organizationId, { value: m.value.slice(0, 500) });
         } else {
-          await memoriesRepo.create({
+          const created = await memoriesRepo.create({
             organizationId, category: m.category, label: m.label.slice(0, 120), value: m.value.slice(0, 500),
             source: 'ai_extracted', agent, sourceConversationId: conversationId || null,
           });
+          console.log(`[memory] created new memory id=${created.id} category=${created.category} label=${created.label}`);
         }
       }
-    } catch {
-      // Extraction is best-effort — never let it break the chat experience.
+    } catch (e: any) {
+      console.error(`[memory] extraction FAILED: ${e?.message || e}`);
     }
   },
 };
