@@ -3,6 +3,7 @@ import { toolSpecs, runTool, ToolContext } from './tools';
 import { toolCache } from './tool-cache';
 import { CFO_SYSTEM_PROMPT } from './prompts';
 import { compactMessages } from './context';
+import { memoryService } from '@/lib/memory/service';
 
 export interface AgentTrace {
   toolCalls: { name: string; args: string; result: any; cached?: boolean }[];
@@ -13,7 +14,9 @@ export async function runCfoAgent(
   userMessages: ChatMessage[], ctx: ToolContext,
   opts?: { systemPrompt?: string; maxSteps?: number; temperature?: number }
 ): Promise<AgentTrace> {
-  const system: ChatMessage = { role: 'system', content: opts?.systemPrompt || CFO_SYSTEM_PROMPT };
+  const memoryContext = await memoryService.getMemoryContext(ctx.organizationId);
+  const systemContent = (opts?.systemPrompt || CFO_SYSTEM_PROMPT) + (memoryContext ? `\n\n${memoryContext}` : '');
+  const system: ChatMessage = { role: 'system', content: systemContent };
   const compacted = await compactMessages(userMessages);
   const messages: ChatMessage[] = [system, ...compacted];
   const trace: AgentTrace = { toolCalls: [], finalAnswer: '' };

@@ -54,3 +54,22 @@ export interface AuditLogDoc {
   metadata?: Record<string, any>;
   createdAt: Date;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Executive Memory System — agent-agnostic structured memory shared by every future AI employee
+// (CFO today; HR/Sales/Legal/Ops/Marketing later). Strictly isolated per organization.
+// ---------------------------------------------------------------------------------------------
+export type MemoryCategory = 'business' | 'financial' | 'goal' | 'decision' | 'preference';
+
+export interface MemoryDoc {
+  id: string;
+  organizationId: string;
+  category: MemoryCategory;
+  label: string;         // short human-readable title, e.g. "Industry" or "Reduce AWS spend"
+  value: string;          // the fact/goal/decision content
+  source: 'user' | 'ai_extracted' | 'system';
+  agent: string;          // which AI employee this came from/is relevant to, e.g. 'cfo' (future: 'hr', 'sales')
+  sourceConversationId?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}

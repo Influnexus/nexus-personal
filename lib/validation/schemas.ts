@@ -25,3 +25,14 @@ export const profileSchema = z.object({
   name: z.string().min(1).max(80).optional(),
   image: z.string().url().optional().or(z.literal('')),
 });
+
+export const memoryCreateSchema = z.object({
+  category: z.enum(['business', 'financial', 'goal', 'decision', 'preference']),
+  label: z.string().min(1).max(120),
+  value: z.string().min(1).max(500),
+});
+
+export const memoryUpdateSchema = z.object({
+  label: z.string().min(1).max(120).optional(),
+  value: z.string().min(1).max(500).optional(),
+});

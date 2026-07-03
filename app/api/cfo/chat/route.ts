@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { runCfoAgent } from '@/lib/ai/agent';
 import { conversationsRepo } from '@/lib/repositories/conversations';
+import { memoryService } from '@/lib/memory/service';
 import { LLMUnavailableError } from '@/lib/ai/provider';
 import { v4 as uuid } from 'uuid';
 
@@ -30,6 +31,8 @@ export async function POST(req: NextRequest) {
       { id: uuid(), role: 'user', content: typeof userMsg.content === 'string' ? userMsg.content : JSON.stringify(userMsg.content), createdAt: now },
       { id: uuid(), role: 'assistant', content: trace.finalAnswer, tool_calls: trace.toolCalls, createdAt: new Date() },
     ]);
+    const userText = typeof userMsg.content === 'string' ? userMsg.content : JSON.stringify(userMsg.content);
+    memoryService.extractMemoriesFromTurn(orgId, 'cfo', userText, convo.id).catch(() => {});
     return NextResponse.json({ conversationId: convo.id, answer: trace.finalAnswer, toolCalls: trace.toolCalls });
   } catch (e: any) {
     if (e instanceof LLMUnavailableError) {

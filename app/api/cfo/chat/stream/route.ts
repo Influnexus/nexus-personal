@@ -8,6 +8,7 @@ import { toolSpecs, runTool } from '@/lib/ai/tools';
 import { toolCache } from '@/lib/ai/tool-cache';
 import { CFO_SYSTEM_PROMPT } from '@/lib/ai/prompts';
 import { compactMessages } from '@/lib/ai/context';
+import { memoryService } from '@/lib/memory/service';
 import { conversationsRepo } from '@/lib/repositories/conversations';
 import { v4 as uuid } from 'uuid';
 
@@ -50,7 +51,8 @@ export async function POST(req: NextRequest) {
 
       try {
         send('meta', { conversationId: convo!.id });
-        const sys = { role: 'system' as const, content: CFO_SYSTEM_PROMPT };
+        const memoryContext = await memoryService.getMemoryContext(orgId);
+        const sys = { role: 'system' as const, content: CFO_SYSTEM_PROMPT + (memoryContext ? `\n\n${memoryContext}` : '') };
         const compacted = await compactMessages(messages);
         const ctxMsgs: any[] = [sys, ...compacted];
         const usedTools: { name: string; result: any }[] = [];
@@ -111,6 +113,11 @@ export async function POST(req: NextRequest) {
 
         send('done', { conversationId: convo!.id, toolCalls: usedTools.map(t => ({ name: t.name })) });
         close();
+
+        // Best-effort, non-blocking memory extraction from this turn's user message — never invents
+        // facts, only captures what the user explicitly stated (business/goal/decision/preference).
+        const lastUserText = typeof last.content === 'string' ? last.content : JSON.stringify(last.content);
+        memoryService.extractMemoriesFromTurn(orgId, 'cfo', lastUserText, convo!.id).catch(() => {});
       } catch (e: any) {
         const isUnavailable = e instanceof LLMUnavailableError;
         send('error', {

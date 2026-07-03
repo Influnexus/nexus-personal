@@ -31,5 +31,6 @@ async function ensureIndexes(db: Db) {
     db.collection('invitations').createIndex({ token: 1 }, { unique: true }),
     db.collection('invitations').createIndex({ organizationId: 1, email: 1 }),
     db.collection('audit_logs').createIndex({ organizationId: 1, createdAt: -1 }),
+    db.collection('memories').createIndex({ organizationId: 1, category: 1 }),
   ]);
 }
