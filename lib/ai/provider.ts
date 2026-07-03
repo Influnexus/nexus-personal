@@ -30,7 +30,9 @@ export class LLMUnavailableError extends Error {
 
 const EMERGENT_URL = 'https://integrations.emergentagent.com/llm/v1/chat/completions';
 const PRIMARY = 'claude-sonnet-4-5-20250929';
-const FALLBACKS = ['gpt-5', 'gemini-2.5-pro'];
+// NOTE: verified against this gateway's /v1/models list — 'gemini-2.5-pro' (bare) is an INVALID
+// model id here, it must be prefixed 'gemini/gemini-2.5-pro'. Without this the fallback silently 400s.
+const FALLBACKS = ['gpt-5', 'gemini/gemini-2.5-pro'];
 const MODELS = [PRIMARY, ...FALLBACKS];
 const RETRY_DELAYS_MS = [500, 1000, 2000];
 
@@ -99,7 +101,11 @@ export function getAiHealth() {
 // ---------- Core request ----------
 function buildBody(opts: CompleteOptions, model: string) {
   const body: any = { model, messages: opts.messages, max_tokens: opts.max_tokens ?? 2048 };
-  if (opts.temperature != null) body.temperature = opts.temperature;
+  // NOTE: verified against this gateway — GPT-5 models reject any temperature other than 1
+  // ("litellm.UnsupportedParamsError: gpt-5 models ... don't support temperature=0"). Omitting it
+  // lets the model use its default (1) instead of 400ing on every fallback call.
+  const supportsCustomTemperature = !/^gpt-5/.test(model);
+  if (opts.temperature != null && supportsCustomTemperature) body.temperature = opts.temperature;
   if (opts.response_format) body.response_format = opts.response_format;
   if (opts.tools) body.tools = opts.tools;
   if (opts.tool_choice) body.tool_choice = opts.tool_choice;
