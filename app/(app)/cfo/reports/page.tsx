@@ -84,18 +84,41 @@ function Tile({ label, value }: { label: string; value: string }) {
   return <div className="rounded-xl border bg-muted/30 p-3"><div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</div><div className="mt-1 text-lg font-semibold tabular-nums">{value}</div></div>;
 }
 function Md({ text }: { text: string }) {
-  const blocks = text.split(/\n\n+/);
-  return <>{blocks.map((b, i) => {
-    if (/^##\s/.test(b)) return <h2 key={i}>{b.replace(/^##\s/, '')}</h2>;
-    if (/^#\s/.test(b)) return <h1 key={i}>{b.replace(/^#\s/, '')}</h1>;
-    const lines = b.split('\n');
-    if (lines.every(l => /^\s*[-*]\s|^\s*\d+\.\s/.test(l))) {
-      const isNum = /^\s*\d+\.\s/.test(lines[0]);
-      return isNum ? <ol key={i}>{lines.map((l, j) => <li key={j}><Inline t={l.replace(/^\s*\d+\.\s/, '')} /></li>)}</ol>
-        : <ul key={i}>{lines.map((l, j) => <li key={j}><Inline t={l.replace(/^\s*[-*]\s/, '')} /></li>)}</ul>;
+  const lines = text.split('\n');
+  const nodes: React.ReactNode[] = [];
+  let i = 0; let key = 0;
+  const isNumLine = (l: string) => /^\s*\d+\.\s/.test(l);
+  const isBulletLine = (l: string) => /^\s*[-*]\s/.test(l);
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.trim() === '') { i++; continue; }
+    if (/^##\s/.test(line)) { nodes.push(<h2 key={key++}>{line.replace(/^##\s/, '')}</h2>); i++; continue; }
+    if (/^#\s/.test(line)) { nodes.push(<h1 key={key++}>{line.replace(/^#\s/, '')}</h1>); i++; continue; }
+    if (isNumLine(line)) {
+      const items: string[] = [];
+      while (i < lines.length) {
+        if (isNumLine(lines[i])) { items.push(lines[i].replace(/^\s*\d+\.\s/, '')); i++; }
+        else if (lines[i].trim() === '' && lines[i + 1] !== undefined && isNumLine(lines[i + 1])) { i++; }
+        else break;
+      }
+      nodes.push(<ol key={key++}>{items.map((it, j) => <li key={j}><Inline t={it} /></li>)}</ol>);
+      continue;
     }
-    return <p key={i}><Inline t={b} /></p>;
-  })}</>;
+    if (isBulletLine(line)) {
+      const items: string[] = [];
+      while (i < lines.length) {
+        if (isBulletLine(lines[i])) { items.push(lines[i].replace(/^\s*[-*]\s/, '')); i++; }
+        else if (lines[i].trim() === '' && lines[i + 1] !== undefined && isBulletLine(lines[i + 1])) { i++; }
+        else break;
+      }
+      nodes.push(<ul key={key++}>{items.map((it, j) => <li key={j}><Inline t={it} /></li>)}</ul>);
+      continue;
+    }
+    const para: string[] = [];
+    while (i < lines.length && lines[i].trim() !== '' && !isNumLine(lines[i]) && !isBulletLine(lines[i]) && !/^#{1,2}\s/.test(lines[i])) { para.push(lines[i]); i++; }
+    nodes.push(<p key={key++}><Inline t={para.join(' ')} /></p>);
+  }
+  return <>{nodes}</>;
 }
 function Inline({ t }: { t: string }) {
   const parts = t.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);

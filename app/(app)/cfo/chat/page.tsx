@@ -215,17 +215,39 @@ function AssistantBubble({ msg }: { msg: UIMsg }) {
 }
 
 function Markdown({ text }: { text: string }) {
-  const blocks = text.split(/\n\n+/);
-  return (<div className="space-y-2">{blocks.map((b, i) => {
-    const lines = b.split('\n');
-    if (lines.every(l => /^\s*\*\s|^\s*-\s|^\s*\d+\.\s/.test(l))) {
-      const isNum = /^\s*\d+\.\s/.test(lines[0]);
-      return isNum ?
-        <ol key={i} className="list-decimal space-y-1 pl-5">{lines.map((l, j) => <li key={j}><Inline t={l.replace(/^\s*\d+\.\s/, '')} /></li>)}</ol> :
-        <ul key={i} className="space-y-1">{lines.map((l, j) => <li key={j} className="flex gap-2"><span className="text-muted-foreground">•</span><span className="flex-1"><Inline t={l.replace(/^\s*[\*\-]\s/, '')} /></span></li>)}</ul>;
+  const lines = text.split('\n');
+  const nodes: React.ReactNode[] = [];
+  let i = 0; let key = 0;
+  const isNumLine = (l: string) => /^\s*\d+\.\s/.test(l);
+  const isBulletLine = (l: string) => /^\s*[\*\-]\s/.test(l);
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.trim() === '') { i++; continue; }
+    if (isNumLine(line)) {
+      const items: string[] = [];
+      while (i < lines.length) {
+        if (isNumLine(lines[i])) { items.push(lines[i].replace(/^\s*\d+\.\s/, '')); i++; }
+        else if (lines[i].trim() === '' && lines[i + 1] !== undefined && isNumLine(lines[i + 1])) { i++; }
+        else break;
+      }
+      nodes.push(<ol key={key++} className="list-decimal space-y-1 pl-5">{items.map((it, j) => <li key={j}><Inline t={it} /></li>)}</ol>);
+      continue;
     }
-    return <p key={i}><Inline t={b} /></p>;
-  })}</div>);
+    if (isBulletLine(line)) {
+      const items: string[] = [];
+      while (i < lines.length) {
+        if (isBulletLine(lines[i])) { items.push(lines[i].replace(/^\s*[\*\-]\s/, '')); i++; }
+        else if (lines[i].trim() === '' && lines[i + 1] !== undefined && isBulletLine(lines[i + 1])) { i++; }
+        else break;
+      }
+      nodes.push(<ul key={key++} className="space-y-1">{items.map((it, j) => <li key={j} className="flex gap-2"><span className="text-muted-foreground">•</span><span className="flex-1"><Inline t={it} /></span></li>)}</ul>);
+      continue;
+    }
+    const para: string[] = [];
+    while (i < lines.length && lines[i].trim() !== '' && !isNumLine(lines[i]) && !isBulletLine(lines[i])) { para.push(lines[i]); i++; }
+    nodes.push(<p key={key++}><Inline t={para.join(' ')} /></p>);
+  }
+  return <div className="space-y-2">{nodes}</div>;
 }
 function Inline({ t }: { t: string }) {
   const parts = t.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
