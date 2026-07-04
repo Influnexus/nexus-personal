@@ -3,6 +3,7 @@ import { auth } from '@/auth';
 import Razorpay from 'razorpay';
 import { PLANS } from '@/lib/billing/plans';
 import { planChangeSchema } from '@/lib/validation/schemas';
+import { rateLimit } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -14,6 +15,9 @@ export async function POST(req: NextRequest) {
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const orgId = session.user.activeOrgId;
   if (!orgId) return NextResponse.json({ error: 'No active organization' }, { status: 400 });
+
+  const rl = rateLimit(`razorpay-order:${orgId}`, 10, 10 * 60_000); // 10 order attempts / 10min / org
+  if (!rl.allowed) return NextResponse.json({ error: 'Too many checkout attempts. Please wait a few minutes and try again.' }, { status: 429 });
 
   const keyId = process.env.RAZORPAY_KEY_ID;
   const keySecret = process.env.RAZORPAY_KEY_SECRET;

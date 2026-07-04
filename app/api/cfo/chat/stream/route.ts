@@ -10,6 +10,7 @@ import { CFO_SYSTEM_PROMPT } from '@/lib/ai/prompts';
 import { compactMessages } from '@/lib/ai/context';
 import { memoryService } from '@/lib/memory/service';
 import { usageService } from '@/lib/billing/usage.service';
+import { rateLimit } from '@/lib/rate-limit';
 import { conversationsRepo } from '@/lib/repositories/conversations';
 import { v4 as uuid } from 'uuid';
 
@@ -37,6 +38,20 @@ export async function POST(req: NextRequest) {
 
   const { messages, conversationId } = await req.json();
   if (!Array.isArray(messages) || messages.length === 0) return new Response('messages required', { status: 400 });
+
+  // Burst-rate guard (separate from monthly usage limits) — protects against rapid-fire abuse
+  // hammering the LLM within a short window, regardless of monthly quota remaining.
+  const burstRl = rateLimit(`chat:${orgId}`, 20, 60_000); // 20 messages / minute / org
+  if (!burstRl.allowed) {
+    const encoder = new TextEncoder();
+    const limited = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(`event: error\ndata: ${JSON.stringify({ code: 'rate_limited', message: 'Too many messages sent too quickly — please wait a moment before trying again.' })}\n\n`));
+        controller.close();
+      },
+    });
+    return new Response(limited, { headers: { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache' } });
+  }
 
   // Usage gating — checked BEFORE any expensive LLM call so blocked usage costs nothing.
   const entitlement = await usageService.checkEntitlement(orgId, 'ai_messages');

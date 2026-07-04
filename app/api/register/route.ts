@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authService } from '@/lib/services/auth.service';
 import { registerSchema } from '@/lib/validation/schemas';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
+  const ip = getClientIp(req);
+  const rl = rateLimit(`register:${ip}`, 8, 10 * 60_000); // 8 registrations / 10min / IP
+  if (!rl.allowed) return NextResponse.json({ error: 'Too many attempts. Please try again in a few minutes.' }, { status: 429 });
   try {
     const body = await req.json();
     const parsed = registerSchema.safeParse(body);

@@ -5,6 +5,7 @@ import { authService } from '@/lib/services/auth.service';
 import { membershipsRepo } from '@/lib/repositories/memberships';
 import { orgsRepo } from '@/lib/repositories/organizations';
 import { demoService } from '@/lib/services/demo.service';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
@@ -12,10 +13,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     Credentials({
       id: 'credentials',
       credentials: { email: {}, password: {} },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         const email = String(credentials?.email || '');
         const password = String(credentials?.password || '');
         if (!email || !password) return null;
+        const ip = getClientIp(request as unknown as Request);
+        // Brute-force guard: limit by IP+email combo so one bad actor can't hammer many accounts,
+        // and a single account can't be hammered from one IP either.
+        const rl = rateLimit(`login:${ip}:${email.toLowerCase()}`, 10, 10 * 60_000);
+        if (!rl.allowed) throw new Error('Too many login attempts. Please try again in a few minutes.');
         const user = await authService.verifyCredentials(email, password);
         if (!user) return null;
         return { id: user.id, email: user.email, name: user.name, image: user.image } as any;
@@ -27,7 +33,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       id: 'demo',
       name: 'Demo',
       credentials: {},
-      async authorize() {
+      async authorize(_credentials, request) {
+        const ip = getClientIp(request as unknown as Request);
+        const rl = rateLimit(`demo:${ip}`, 10, 15 * 60_000); // 10 demo workspaces / 15min / IP
+        if (!rl.allowed) throw new Error('Too many demo workspaces created — please try again later.');
         const demoUser = await demoService.createDemoWorkspace();
         return { id: demoUser.id, email: demoUser.email, name: demoUser.name, isDemo: true } as any;
       },
