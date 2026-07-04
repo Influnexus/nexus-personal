@@ -17,6 +17,7 @@ import {
   CheckCircle2, Sparkles, Clock, CreditCard, FileText, Building2, Printer, RotateCcw,
   AlertTriangle, ShieldCheck, MapPin, TrendingUp,
 } from 'lucide-react';
+import { RazorpayPayButton } from '@/components/app/RazorpayPayButton';
 
 const fetcher = (u: string) => fetch(u).then(r => r.json());
 
@@ -131,8 +132,8 @@ export default function BillingPage() {
         <p className="mb-4 flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="h-3.5 w-3.5" /> Billed via {providerName} {region === 'IN' ? '(India)' : '(International)'} — switch above if this is wrong.</p>
         {plans && (
           <PlanGrid
-            plans={plans} currency={currency} interval={interval} currentPlan={sub?.plan}
-            busyPlan={busyPlan} onSelect={sub ? changePlan : startTrial}
+            plans={plans} currency={currency} interval={interval} currentPlan={sub?.plan} region={region}
+            busyPlan={busyPlan} onSelect={sub ? changePlan : startTrial} onPaid={() => mutate()}
             actionLabel={sub ? 'Switch to this plan' : 'Start 14-day free trial'}
           />
         )}
@@ -257,7 +258,7 @@ function UsageDashboard({ usage }: { usage: { period: string; usage: { metric: s
   );
 }
 
-function PlanGrid({ plans, currency, interval, currentPlan, busyPlan, onSelect, actionLabel }: any) {
+function PlanGrid({ plans, currency, interval, currentPlan, busyPlan, onSelect, actionLabel, region, onPaid }: any) {
   const order: PlanId[] = ['starter', 'growth', 'enterprise'];
   return (
     <div className="grid gap-4 md:grid-cols-3">
@@ -286,6 +287,9 @@ function PlanGrid({ plans, currency, interval, currentPlan, busyPlan, onSelect, 
               <Button className="w-full" variant={isCurrent ? 'outline' : 'default'} disabled={isCurrent || busyPlan === id} onClick={() => onSelect(id)}>
                 {busyPlan === id ? 'Please wait…' : isCurrent ? 'Current plan' : id === 'enterprise' ? 'Contact sales' : actionLabel}
               </Button>
+              {region === 'IN' && (id === 'starter' || id === 'growth') && !isCurrent && (
+                <RazorpayPayButton plan={id} interval={interval} onVerified={onPaid} />
+              )}
             </CardContent>
           </Card>
         );

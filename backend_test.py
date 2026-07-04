@@ -1,519 +1,633 @@
 #!/usr/bin/env python3
 """
-Sprint 2.7 Phase 2 - AI CFO Production Hardening Tests
-Tests: First chat reliability, invoice upload hardening, CSV import hardening,
-long conversation stability, dashboard auto-refresh
+Backend test for Razorpay Standard Checkout integration (Sprint 2.7 Phase 4B)
+Tests all 8 scenarios specified in the review request.
 """
-import requests
-import json
-import time
-import io
-from PIL import Image
 
-BASE_URL = "https://nexus-enterprise-ai-2.preview.emergentagent.com"
+import requests
+import hmac
+import hashlib
+import json
+import sys
+import os
+
+# Get base URL from environment
+BASE_URL = os.getenv('NEXT_PUBLIC_BASE_URL', 'https://nexus-enterprise-ai-2.preview.emergentagent.com')
+RAZORPAY_KEY_SECRET = 'kiLZfoAX1MFp1vjVJ90B3oRx'
+RAZORPAY_KEY_ID = 'rzp_test_T9NJcBZijywoUJ'
 
 def create_demo_session():
     """Create a demo session using NextAuth demo provider"""
-    s = requests.Session()
+    session = requests.Session()
     
     # Get CSRF token
-    csrf_resp = s.get(f"{BASE_URL}/api/auth/csrf")
-    assert csrf_resp.status_code == 200, f"CSRF failed: {csrf_resp.status_code}"
-    csrf_token = csrf_resp.json()["csrfToken"]
-    print(f"✓ CSRF token obtained: {csrf_token[:20]}...")
+    csrf_resp = session.get(f'{BASE_URL}/api/auth/csrf', timeout=30)
+    if csrf_resp.status_code != 200:
+        print(f"❌ Failed to get CSRF token: {csrf_resp.status_code}")
+        return None
+    
+    csrf_token = csrf_resp.json().get('csrfToken')
+    if not csrf_token:
+        print("❌ No CSRF token in response")
+        return None
+    
+    print(f"✅ Got CSRF token: {csrf_token[:20]}...")
     
     # Create demo session
-    demo_resp = s.post(
-        f"{BASE_URL}/api/auth/callback/demo",
-        data={"csrfToken": csrf_token, "redirect": "false"},
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        allow_redirects=False
+    demo_resp = session.post(
+        f'{BASE_URL}/api/auth/callback/demo',
+        data={'csrfToken': csrf_token},
+        allow_redirects=False,
+        timeout=30
     )
-    assert demo_resp.status_code in [200, 302], f"Demo session failed: {demo_resp.status_code}"
-    print(f"✓ Demo session created (status: {demo_resp.status_code})")
+    
+    if demo_resp.status_code not in [200, 302, 307]:
+        print(f"❌ Failed to create demo session: {demo_resp.status_code}")
+        return None
+    
+    print(f"✅ Demo session created (status {demo_resp.status_code})")
     
     # Verify session
-    session_resp = s.get(f"{BASE_URL}/api/auth/session")
-    assert session_resp.status_code == 200, f"Session check failed: {session_resp.status_code}"
+    session_resp = session.get(f'{BASE_URL}/api/auth/session', timeout=30)
+    if session_resp.status_code != 200:
+        print(f"❌ Failed to verify session: {session_resp.status_code}")
+        return None
+    
     session_data = session_resp.json()
-    assert session_data.get("user", {}).get("isDemo") == True, "isDemo not set"
-    assert session_data.get("user", {}).get("activeOrgId"), "activeOrgId not set"
-    print(f"✓ Session verified: isDemo={session_data['user']['isDemo']}, activeOrgId={session_data['user']['activeOrgId']}")
+    if not session_data.get('user'):
+        print("❌ No user in session")
+        return None
     
-    return s
+    print(f"✅ Session verified: user={session_data['user'].get('email', 'N/A')}, activeOrgId={session_data['user'].get('activeOrgId', 'N/A')[:8]}...")
+    
+    return session
 
-def parse_sse_events(text):
-    """Parse Server-Sent Events from response text"""
-    events = []
-    lines = text.strip().split('\n')
-    current_event = {}
+def test_1_starter_monthly(session):
+    """Test 1: POST /api/billing/razorpay/order with starter monthly"""
+    print("\n" + "="*80)
+    print("TEST 1: Create order for Starter Monthly")
+    print("="*80)
     
-    for line in lines:
-        line = line.strip()
-        if not line:
-            if current_event:
-                events.append(current_event)
-                current_event = {}
-            continue
-        
-        if line.startswith('event:'):
-            current_event['event'] = line.split(':', 1)[1].strip()
-        elif line.startswith('data:'):
-            data_str = line.split(':', 1)[1].strip()
-            try:
-                current_event['data'] = json.loads(data_str)
-            except:
-                current_event['data'] = data_str
-    
-    if current_event:
-        events.append(current_event)
-    
-    return events
-
-def test_chat_message(session, question, conversation_id=None):
-    """Send a single chat message and validate response"""
-    messages = [{"role": "user", "content": question}]
-    payload = {"messages": messages}
-    if conversation_id:
-        payload["conversationId"] = conversation_id
-    
-    resp = session.post(
-        f"{BASE_URL}/api/cfo/chat/stream",
-        json=payload,
-        stream=True,
-        timeout=60
-    )
-    
-    assert resp.status_code == 200, f"Chat failed: {resp.status_code}"
-    assert "text/event-stream" in resp.headers.get("Content-Type", ""), "Not SSE stream"
-    
-    # Collect all events
-    events = parse_sse_events(resp.text)
-    event_types = [e.get('event') for e in events]
-    
-    # Check for required events
-    has_done = 'done' in event_types
-    has_error = 'error' in event_types
-    has_ai_unavailable = any(e.get('event') == 'error' and e.get('data', {}).get('code') == 'ai_unavailable' for e in events)
-    
-    # Assemble final answer
-    final_answer = ""
-    for e in events:
-        if e.get('event') == 'token':
-            final_answer += e.get('data', {}).get('delta', '')
-    
-    # Get conversationId from meta event
-    conv_id = None
-    for e in events:
-        if e.get('event') == 'meta':
-            conv_id = e.get('data', {}).get('conversationId')
-            break
-    
-    return {
-        "success": has_done and not has_ai_unavailable,
-        "has_done": has_done,
-        "has_error": has_error,
-        "has_ai_unavailable": has_ai_unavailable,
-        "events": event_types,
-        "final_answer": final_answer,
-        "conversationId": conv_id
-    }
-
-def create_test_png(size=(10, 10)):
-    """Create a small test PNG image"""
-    img = Image.new('RGB', size, color='red')
-    buf = io.BytesIO()
-    img.save(buf, format='PNG')
-    buf.seek(0)
-    return buf
-
-def create_test_csv(rows):
-    """Create a CSV file with given rows"""
-    csv_content = "date,description,vendor,amount\n"
-    for row in rows:
-        csv_content += f"{row['date']},{row['description']},{row['vendor']},{row['amount']}\n"
-    return io.BytesIO(csv_content.encode('utf-8'))
-
-print("=" * 80)
-print("SPRINT 2.7 PHASE 2 - AI CFO PRODUCTION HARDENING TESTS")
-print("=" * 80)
-
-# Setup: Create demo session
-print("\n[SETUP] Creating demo session...")
-session = create_demo_session()
-print("✓ Demo session ready\n")
-
-# TEST 1: First chat reliability (5 different questions)
-print("=" * 80)
-print("TEST 1: FIRST CHAT RELIABILITY (5 DIFFERENT QUESTIONS)")
-print("=" * 80)
-
-questions = [
-    "What is my cash runway?",
-    "Which expenses grew the most this month?",
-    "Are there any overdue invoices?",
-    "What anomalies do you see in my spending?",
-    "Give me 3 recommendations to improve cash flow."
-]
-
-test1_results = []
-for i, question in enumerate(questions, 1):
-    print(f"\n[TEST 1.{i}] Question: '{question}'")
     try:
-        result = test_chat_message(session, question)
-        test1_results.append(result)
+        resp = session.post(
+            f'{BASE_URL}/api/billing/razorpay/order',
+            json={'plan': 'starter', 'interval': 'monthly'},
+            timeout=30
+        )
         
-        if result["success"]:
-            print(f"  ✓ Response received with 'done' event")
-            print(f"  ✓ Events: {', '.join(result['events'])}")
-            print(f"  ✓ Answer length: {len(result['final_answer'])} chars")
-            print(f"  ✓ Has content: {len(result['final_answer']) > 0}")
-            if result["has_ai_unavailable"]:
-                print(f"  ✗ ERROR: 'ai_unavailable' error found in stream")
-        else:
-            print(f"  ✗ FAILED: has_done={result['has_done']}, has_ai_unavailable={result['has_ai_unavailable']}")
-            print(f"  Events: {result['events']}")
+        print(f"Status: {resp.status_code}")
+        data = resp.json()
+        print(f"Response: {json.dumps(data, indent=2)}")
+        
+        if resp.status_code != 200:
+            print(f"❌ FAIL: Expected 200, got {resp.status_code}")
+            return None
+        
+        # Verify response structure
+        if 'orderId' not in data or not data['orderId'].startswith('order_'):
+            print(f"❌ FAIL: orderId missing or invalid: {data.get('orderId')}")
+            return None
+        
+        if data.get('amount') != 499900:
+            print(f"❌ FAIL: Expected amount=499900 (₹4999), got {data.get('amount')}")
+            return None
+        
+        if data.get('currency') != 'INR':
+            print(f"❌ FAIL: Expected currency=INR, got {data.get('currency')}")
+            return None
+        
+        if data.get('keyId') != RAZORPAY_KEY_ID:
+            print(f"❌ FAIL: Expected keyId={RAZORPAY_KEY_ID}, got {data.get('keyId')}")
+            return None
+        
+        print(f"✅ PASS: Order created successfully")
+        print(f"   - orderId: {data['orderId']}")
+        print(f"   - amount: {data['amount']} paise (₹{data['amount']/100})")
+        print(f"   - currency: {data['currency']}")
+        print(f"   - keyId: {data['keyId']}")
+        
+        return data['orderId']
+        
     except Exception as e:
-        print(f"  ✗ EXCEPTION: {e}")
-        test1_results.append({"success": False, "error": str(e)})
+        print(f"❌ FAIL: Exception: {e}")
+        return None
 
-test1_pass = sum(1 for r in test1_results if r.get("success")) == len(questions)
-print(f"\n[TEST 1 SUMMARY] {'✓ PASS' if test1_pass else '✗ FAIL'}: {sum(1 for r in test1_results if r.get('success'))}/{len(questions)} questions succeeded")
-
-# TEST 1b: Multi-turn conversation (reuse one conversation across 5 messages)
-print("\n" + "=" * 80)
-print("TEST 1b: MULTI-TURN CONVERSATION (REUSE ONE CONVERSATION)")
-print("=" * 80)
-
-multi_turn_questions = [
-    "What is my current cash position?",
-    "Tell me more about my expenses",
-    "What about revenue?",
-    "Any recommendations?",
-    "Summarize everything"
-]
-
-conversation_id = None
-test1b_results = []
-for i, question in enumerate(multi_turn_questions, 1):
-    print(f"\n[TEST 1b.{i}] Question: '{question}' (conversationId: {conversation_id or 'new'})")
-    try:
-        result = test_chat_message(session, question, conversation_id)
-        test1b_results.append(result)
-        
-        # Update conversation_id for next turn
-        if result.get("conversationId"):
-            conversation_id = result["conversationId"]
-        
-        if result["success"]:
-            print(f"  ✓ Response received with 'done' event")
-            print(f"  ✓ ConversationId: {result['conversationId']}")
-            print(f"  ✓ Answer length: {len(result['final_answer'])} chars")
-        else:
-            print(f"  ✗ FAILED: has_done={result['has_done']}, has_ai_unavailable={result['has_ai_unavailable']}")
-    except Exception as e:
-        print(f"  ✗ EXCEPTION: {e}")
-        test1b_results.append({"success": False, "error": str(e)})
-
-test1b_pass = sum(1 for r in test1b_results if r.get("success")) == len(multi_turn_questions)
-print(f"\n[TEST 1b SUMMARY] {'✓ PASS' if test1b_pass else '✗ FAIL'}: {sum(1 for r in test1b_results if r.get('success'))}/{len(multi_turn_questions)} messages succeeded")
-
-# TEST 2: Invoice upload hardening
-print("\n" + "=" * 80)
-print("TEST 2: INVOICE UPLOAD HARDENING")
-print("=" * 80)
-
-# TEST 2a: Valid small PNG
-print("\n[TEST 2a] Upload valid small PNG")
-try:
-    png_file = create_test_png((10, 10))
-    resp = session.post(
-        f"{BASE_URL}/api/cfo/invoices",
-        files={"file": ("test.png", png_file, "image/png")},
-        timeout=90
-    )
-    test2a_pass = resp.status_code in [200, 400, 500]
-    if test2a_pass:
-        data = resp.json()
-        if resp.status_code == 200:
-            print(f"  ✓ Upload succeeded: {resp.status_code}")
-            print(f"  ✓ Invoice created: {data.get('invoice', {}).get('id', 'N/A')}")
-        else:
-            print(f"  ✓ Graceful error: {resp.status_code}")
-            print(f"  ✓ Error message: {data.get('error', 'N/A')}")
-            print(f"  ✓ No crash, no raw stack trace")
-    else:
-        print(f"  ✗ FAILED: Unexpected status {resp.status_code}")
-except Exception as e:
-    print(f"  ✗ EXCEPTION: {e}")
-    test2a_pass = False
-
-# TEST 2b: Fake HEIC file
-print("\n[TEST 2b] Upload fake HEIC file")
-try:
-    fake_heic = io.BytesIO(b"fake heic content")
-    resp = session.post(
-        f"{BASE_URL}/api/cfo/invoices",
-        files={"file": ("test.heic", fake_heic, "image/heic")},
-        timeout=30
-    )
-    test2b_pass = resp.status_code == 400
-    if test2b_pass:
-        data = resp.json()
-        error_msg = data.get("error", "")
-        has_heic_mention = "heic" in error_msg.lower() or "heif" in error_msg.lower()
-        has_conversion_tip = "convert" in error_msg.lower() or "jpg" in error_msg.lower() or "png" in error_msg.lower()
-        print(f"  ✓ Rejected with 400")
-        print(f"  ✓ Error message: {error_msg}")
-        print(f"  ✓ Mentions HEIC/HEIF: {has_heic_mention}")
-        print(f"  ✓ Suggests conversion: {has_conversion_tip}")
-        test2b_pass = test2b_pass and has_heic_mention and has_conversion_tip
-    else:
-        print(f"  ✗ FAILED: Expected 400, got {resp.status_code}")
-except Exception as e:
-    print(f"  ✗ EXCEPTION: {e}")
-    test2b_pass = False
-
-# TEST 2c: Empty file
-print("\n[TEST 2c] Upload empty file")
-try:
-    empty_file = io.BytesIO(b"")
-    resp = session.post(
-        f"{BASE_URL}/api/cfo/invoices",
-        files={"file": ("empty.png", empty_file, "image/png")},
-        timeout=30
-    )
-    test2c_pass = resp.status_code == 400
-    if test2c_pass:
-        data = resp.json()
-        error_msg = data.get("error", "")
-        print(f"  ✓ Rejected with 400")
-        print(f"  ✓ Error message: {error_msg}")
-        print(f"  ✓ Clear message (not 500 crash)")
-    else:
-        print(f"  ✗ FAILED: Expected 400, got {resp.status_code}")
-except Exception as e:
-    print(f"  ✗ EXCEPTION: {e}")
-    test2c_pass = False
-
-# TEST 2d: Unsupported mimetype
-print("\n[TEST 2d] Upload unsupported mimetype (text/plain)")
-try:
-    text_file = io.BytesIO(b"This is a text file, not an invoice")
-    resp = session.post(
-        f"{BASE_URL}/api/cfo/invoices",
-        files={"file": ("invoice.txt", text_file, "text/plain")},
-        timeout=30
-    )
-    test2d_pass = resp.status_code == 400
-    if test2d_pass:
-        data = resp.json()
-        error_msg = data.get("error", "")
-        has_unsupported_mention = "unsupported" in error_msg.lower() or "type" in error_msg.lower()
-        print(f"  ✓ Rejected with 400")
-        print(f"  ✓ Error message: {error_msg}")
-        print(f"  ✓ Mentions unsupported type: {has_unsupported_mention}")
-    else:
-        print(f"  ✗ FAILED: Expected 400, got {resp.status_code}")
-except Exception as e:
-    print(f"  ✗ EXCEPTION: {e}")
-    test2d_pass = False
-
-test2_pass = test2a_pass and test2b_pass and test2c_pass and test2d_pass
-print(f"\n[TEST 2 SUMMARY] {'✓ PASS' if test2_pass else '✗ FAIL'}: Invoice upload hardening working correctly")
-
-# TEST 3: CSV import hardening
-print("\n" + "=" * 80)
-print("TEST 3: CSV IMPORT HARDENING")
-print("=" * 80)
-
-# TEST 3a: CSV with invalid rows
-print("\n[TEST 3a] Upload CSV with 5 rows (2 invalid: missing date/amount)")
-try:
-    csv_rows = [
-        {"date": "2024-01-15", "description": "Valid row 1", "vendor": "Vendor A", "amount": "100.00"},
-        {"date": "", "description": "Invalid - no date", "vendor": "Vendor B", "amount": "200.00"},  # Invalid
-        {"date": "2024-01-17", "description": "Valid row 2", "vendor": "Vendor C", "amount": "300.00"},
-        {"date": "2024-01-18", "description": "Invalid - no amount", "vendor": "Vendor D", "amount": ""},  # Invalid
-        {"date": "2024-01-19", "description": "Valid row 3", "vendor": "Vendor E", "amount": "500.00"},
-    ]
-    csv_file = create_test_csv(csv_rows)
-    resp = session.post(
-        f"{BASE_URL}/api/cfo/transactions",
-        files={"file": ("test.csv", csv_file, "text/csv")},
-        timeout=60
-    )
-    test3a_pass = resp.status_code == 200
-    if test3a_pass:
-        data = resp.json()
-        imported = data.get("imported", 0)
-        skipped = data.get("skipped", 0)
-        duplicates = data.get("duplicates", 0)
-        total = data.get("totalRows", 0)
-        print(f"  ✓ Import succeeded: {resp.status_code}")
-        print(f"  ✓ Response: {data}")
-        print(f"  ✓ Imported: {imported}, Skipped: {skipped}, Duplicates: {duplicates}, Total: {total}")
-        # Allow some variance in categorization, but should have ~3 imported, ~2 skipped
-        test3a_pass = imported >= 2 and skipped >= 1
-        if test3a_pass:
-            print(f"  ✓ Validation: imported={imported} (expected ~3), skipped={skipped} (expected ~2)")
-        else:
-            print(f"  ✗ Validation failed: imported={imported}, skipped={skipped}")
-    else:
-        print(f"  ✗ FAILED: Expected 200, got {resp.status_code}")
-except Exception as e:
-    print(f"  ✗ EXCEPTION: {e}")
-    test3a_pass = False
-
-# TEST 3b: Re-upload same CSV (duplicate detection)
-print("\n[TEST 3b] Re-upload SAME CSV (duplicate detection)")
-try:
-    # Use same valid rows from 3a
-    csv_rows_dup = [
-        {"date": "2024-01-15", "description": "Valid row 1", "vendor": "Vendor A", "amount": "100.00"},
-        {"date": "2024-01-17", "description": "Valid row 2", "vendor": "Vendor C", "amount": "300.00"},
-        {"date": "2024-01-19", "description": "Valid row 3", "vendor": "Vendor E", "amount": "500.00"},
-    ]
-    csv_file_dup = create_test_csv(csv_rows_dup)
-    resp = session.post(
-        f"{BASE_URL}/api/cfo/transactions",
-        files={"file": ("test_dup.csv", csv_file_dup, "text/csv")},
-        timeout=60
-    )
-    test3b_pass = resp.status_code == 200
-    if test3b_pass:
-        data = resp.json()
-        imported = data.get("imported", 0)
-        duplicates = data.get("duplicates", 0)
-        print(f"  ✓ Import succeeded: {resp.status_code}")
-        print(f"  ✓ Response: {data}")
-        print(f"  ✓ Imported: {imported}, Duplicates: {duplicates}")
-        # Should have duplicates > 0 (matching previously imported rows)
-        test3b_pass = duplicates > 0
-        if test3b_pass:
-            print(f"  ✓ Validation: duplicates={duplicates} (expected >0)")
-        else:
-            print(f"  ✗ Validation failed: duplicates={duplicates} (expected >0)")
-    else:
-        print(f"  ✗ FAILED: Expected 200, got {resp.status_code}")
-except Exception as e:
-    print(f"  ✗ EXCEPTION: {e}")
-    test3b_pass = False
-
-test3_pass = test3a_pass and test3b_pass
-print(f"\n[TEST 3 SUMMARY] {'✓ PASS' if test3_pass else '✗ FAIL'}: CSV import hardening working correctly")
-
-# TEST 4: Long conversation stability (15 sequential messages)
-print("\n" + "=" * 80)
-print("TEST 4: LONG CONVERSATION STABILITY (15 SEQUENTIAL MESSAGES)")
-print("=" * 80)
-
-long_conv_questions = [
-    "What is my cash position?",
-    "Tell me more",
-    "What about expenses?",
-    "Any revenue trends?",
-    "What are my top vendors?",
-    "Any anomalies?",
-    "What about invoices?",
-    "Give me recommendations",
-    "What is my runway?",
-    "Tell me about health score",
-    "What categories spend most?",
-    "Any overdue items?",
-    "Forecast next month",
-    "Summarize everything",
-    "Final thoughts?"
-]
-
-conversation_id_long = None
-test4_results = []
-for i, question in enumerate(long_conv_questions, 1):
-    print(f"\n[TEST 4.{i}] Message #{i}: '{question}' (conversationId: {conversation_id_long or 'new'})")
-    try:
-        result = test_chat_message(session, question, conversation_id_long)
-        test4_results.append(result)
-        
-        # Update conversation_id for next turn
-        if result.get("conversationId"):
-            conversation_id_long = result["conversationId"]
-        
-        if result["success"]:
-            print(f"  ✓ Response received with 'done' event")
-            print(f"  ✓ Answer length: {len(result['final_answer'])} chars")
-        else:
-            print(f"  ✗ FAILED: has_done={result['has_done']}, has_ai_unavailable={result['has_ai_unavailable']}")
-            print(f"  Events: {result['events']}")
-    except Exception as e:
-        print(f"  ✗ EXCEPTION: {e}")
-        test4_results.append({"success": False, "error": str(e)})
+def test_2_growth_yearly(session):
+    """Test 2: POST /api/billing/razorpay/order with growth yearly"""
+    print("\n" + "="*80)
+    print("TEST 2: Create order for Growth Yearly")
+    print("="*80)
     
-    # Small delay between messages
-    time.sleep(0.5)
-
-test4_pass = sum(1 for r in test4_results if r.get("success")) == len(long_conv_questions)
-print(f"\n[TEST 4 SUMMARY] {'✓ PASS' if test4_pass else '✗ FAIL'}: {sum(1 for r in test4_results if r.get('success'))}/{len(long_conv_questions)} messages succeeded")
-if test4_pass:
-    print("  ✓ Conversation compaction logic working (no context-length error)")
-
-# TEST 5: Dashboard auto-refresh data check
-print("\n" + "=" * 80)
-print("TEST 5: DASHBOARD AUTO-REFRESH DATA CHECK")
-print("=" * 80)
-
-print("\n[TEST 5] GET /api/cfo/briefing after uploads")
-try:
-    resp = session.get(f"{BASE_URL}/api/cfo/briefing", timeout=30)
-    test5_pass = resp.status_code == 200
-    if test5_pass:
+    try:
+        resp = session.post(
+            f'{BASE_URL}/api/billing/razorpay/order',
+            json={'plan': 'growth', 'interval': 'yearly'},
+            timeout=30
+        )
+        
+        print(f"Status: {resp.status_code}")
         data = resp.json()
-        required_keys = ["briefing", "kpis", "health", "forecast"]
-        has_all_keys = all(k in data for k in required_keys)
-        print(f"  ✓ Briefing retrieved: {resp.status_code}")
-        print(f"  ✓ Has all required keys: {has_all_keys}")
+        print(f"Response: {json.dumps(data, indent=2)}")
         
-        # Check if data reflects uploads (transaction/invoice counts should be > 0)
-        kpis = data.get("kpis", {})
-        print(f"  ✓ KPIs: revenue={kpis.get('revenue')}, expenses={kpis.get('expenses')}")
+        if resp.status_code != 200:
+            print(f"❌ FAIL: Expected 200, got {resp.status_code}")
+            return None
         
-        # Note: We can't definitively prove auto-refresh without frontend SWR,
-        # but we can confirm the data is accessible and reflects the org's state
-        print(f"  ✓ Data accessible (proves underlying data changed, which SWR would pick up)")
-        test5_pass = has_all_keys
+        # Expected: 14999 * 12 * 0.8 = 143990.4 rounded = 143990 INR = 14399000 paise
+        expected_amount = 14399000
+        if data.get('amount') != expected_amount:
+            print(f"❌ FAIL: Expected amount={expected_amount} (₹143990), got {data.get('amount')}")
+            return None
+        
+        if data.get('currency') != 'INR':
+            print(f"❌ FAIL: Expected currency=INR, got {data.get('currency')}")
+            return None
+        
+        print(f"✅ PASS: Order created successfully")
+        print(f"   - orderId: {data['orderId']}")
+        print(f"   - amount: {data['amount']} paise (₹{data['amount']/100})")
+        print(f"   - currency: {data['currency']}")
+        
+        return data['orderId']
+        
+    except Exception as e:
+        print(f"❌ FAIL: Exception: {e}")
+        return None
+
+def test_3_enterprise_monthly(session):
+    """Test 3: POST /api/billing/razorpay/order with enterprise monthly (should fail)"""
+    print("\n" + "="*80)
+    print("TEST 3: Create order for Enterprise Monthly (should fail)")
+    print("="*80)
+    
+    try:
+        resp = session.post(
+            f'{BASE_URL}/api/billing/razorpay/order',
+            json={'plan': 'enterprise', 'interval': 'monthly'},
+            timeout=30
+        )
+        
+        print(f"Status: {resp.status_code}")
+        data = resp.json()
+        print(f"Response: {json.dumps(data, indent=2)}")
+        
+        if resp.status_code != 400:
+            print(f"❌ FAIL: Expected 400, got {resp.status_code}")
+            return False
+        
+        if 'error' not in data:
+            print(f"❌ FAIL: Expected error message in response")
+            return False
+        
+        print(f"✅ PASS: Enterprise plan correctly rejected with 400")
+        print(f"   - Error: {data['error']}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ FAIL: Exception: {e}")
+        return False
+
+def test_4_unauthenticated():
+    """Test 4: Unauthenticated requests should return 401"""
+    print("\n" + "="*80)
+    print("TEST 4: Unauthenticated requests (should return 401)")
+    print("="*80)
+    
+    unauth_session = requests.Session()
+    
+    # Test order endpoint
+    print("\n4a. Testing POST /api/billing/razorpay/order without auth...")
+    try:
+        resp = unauth_session.post(
+            f'{BASE_URL}/api/billing/razorpay/order',
+            json={'plan': 'starter', 'interval': 'monthly'},
+            timeout=30
+        )
+        
+        print(f"Status: {resp.status_code}")
+        if resp.status_code != 401:
+            print(f"❌ FAIL: Expected 401, got {resp.status_code}")
+            return False
+        print(f"✅ PASS: Order endpoint returns 401 for unauthenticated request")
+    except Exception as e:
+        print(f"❌ FAIL: Exception: {e}")
+        return False
+    
+    # Test verify endpoint
+    print("\n4b. Testing POST /api/billing/razorpay/verify without auth...")
+    try:
+        resp = unauth_session.post(
+            f'{BASE_URL}/api/billing/razorpay/verify',
+            json={
+                'razorpay_payment_id': 'pay_test123',
+                'razorpay_order_id': 'order_test123',
+                'razorpay_signature': 'fake_signature'
+            },
+            timeout=30
+        )
+        
+        print(f"Status: {resp.status_code}")
+        if resp.status_code != 401:
+            print(f"❌ FAIL: Expected 401, got {resp.status_code}")
+            return False
+        print(f"✅ PASS: Verify endpoint returns 401 for unauthenticated request")
+    except Exception as e:
+        print(f"❌ FAIL: Exception: {e}")
+        return False
+    
+    print(f"\n✅ PASS: Both endpoints correctly reject unauthenticated requests")
+    return True
+
+def test_5_wrong_signature(session, order_id):
+    """Test 5: Wrong signature should return 400 and not activate subscription"""
+    print("\n" + "="*80)
+    print("TEST 5: Wrong signature verification (should fail)")
+    print("="*80)
+    
+    if not order_id:
+        print("❌ SKIP: No order_id from previous test")
+        return False
+    
+    try:
+        # Try to verify with wrong signature
+        resp = session.post(
+            f'{BASE_URL}/api/billing/razorpay/verify',
+            json={
+                'razorpay_payment_id': 'pay_fake123',
+                'razorpay_order_id': order_id,
+                'razorpay_signature': '0000000000deadbeef'
+            },
+            timeout=30
+        )
+        
+        print(f"Status: {resp.status_code}")
+        data = resp.json()
+        print(f"Response: {json.dumps(data, indent=2)}")
+        
+        if resp.status_code != 400:
+            print(f"❌ FAIL: Expected 400, got {resp.status_code}")
+            return False
+        
+        if data.get('verified') != False:
+            print(f"❌ FAIL: Expected verified=false, got {data.get('verified')}")
+            return False
+        
+        print(f"✅ PASS: Wrong signature correctly rejected with 400")
+        print(f"   - Error: {data.get('error')}")
+        
+        # Verify subscription is still null/unaffected
+        print("\nVerifying subscription is still null/unaffected...")
+        sub_resp = session.get(f'{BASE_URL}/api/billing/subscription', timeout=30)
+        if sub_resp.status_code != 200:
+            print(f"❌ FAIL: Failed to get subscription: {sub_resp.status_code}")
+            return False
+        
+        sub_data = sub_resp.json()
+        subscription = sub_data.get('subscription')
+        
+        # Subscription should be null or not active
+        if subscription and subscription.get('status') == 'active' and subscription.get('provider') == 'razorpay':
+            print(f"❌ FAIL: Subscription was activated despite wrong signature!")
+            print(f"   - Subscription: {json.dumps(subscription, indent=2)}")
+            return False
+        
+        print(f"✅ PASS: Subscription is still null/unaffected (status={subscription.get('status') if subscription else 'null'})")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ FAIL: Exception: {e}")
+        return False
+
+def test_6_correct_signature(session, order_id):
+    """Test 6: Correct signature should activate subscription and create invoice"""
+    print("\n" + "="*80)
+    print("TEST 6: Correct signature verification (should succeed)")
+    print("="*80)
+    
+    if not order_id:
+        print("❌ SKIP: No order_id from previous test")
+        return False
+    
+    try:
+        # Compute correct signature
+        payment_id = 'pay_test_12345'
+        message = f"{order_id}|{payment_id}"
+        signature = hmac.new(
+            RAZORPAY_KEY_SECRET.encode(),
+            message.encode(),
+            hashlib.sha256
+        ).hexdigest()
+        
+        print(f"Computing signature for: {message}")
+        print(f"Signature: {signature}")
+        
+        # Verify with correct signature
+        resp = session.post(
+            f'{BASE_URL}/api/billing/razorpay/verify',
+            json={
+                'razorpay_payment_id': payment_id,
+                'razorpay_order_id': order_id,
+                'razorpay_signature': signature
+            },
+            timeout=30
+        )
+        
+        print(f"Status: {resp.status_code}")
+        data = resp.json()
+        print(f"Response: {json.dumps(data, indent=2)}")
+        
+        if resp.status_code != 200:
+            print(f"❌ FAIL: Expected 200, got {resp.status_code}")
+            print(f"   - Error: {data.get('error')}")
+            return False
+        
+        if data.get('verified') != True:
+            print(f"❌ FAIL: Expected verified=true, got {data.get('verified')}")
+            return False
+        
+        if data.get('plan') != 'starter':
+            print(f"❌ FAIL: Expected plan=starter, got {data.get('plan')}")
+            return False
+        
+        if data.get('interval') != 'monthly':
+            print(f"❌ FAIL: Expected interval=monthly, got {data.get('interval')}")
+            return False
+        
+        print(f"✅ PASS: Payment verified successfully")
+        print(f"   - verified: {data['verified']}")
+        print(f"   - plan: {data['plan']}")
+        print(f"   - interval: {data['interval']}")
+        
+        # Verify subscription is now active
+        print("\nVerifying subscription is now active...")
+        sub_resp = session.get(f'{BASE_URL}/api/billing/subscription', timeout=30)
+        if sub_resp.status_code != 200:
+            print(f"❌ FAIL: Failed to get subscription: {sub_resp.status_code}")
+            return False
+        
+        sub_data = sub_resp.json()
+        subscription = sub_data.get('subscription')
+        
+        if not subscription:
+            print(f"❌ FAIL: No subscription found")
+            return False
+        
+        if subscription.get('status') != 'active':
+            print(f"❌ FAIL: Expected status=active, got {subscription.get('status')}")
+            return False
+        
+        if subscription.get('provider') != 'razorpay':
+            print(f"❌ FAIL: Expected provider=razorpay, got {subscription.get('provider')}")
+            return False
+        
+        if subscription.get('plan') != 'starter':
+            print(f"❌ FAIL: Expected plan=starter, got {subscription.get('plan')}")
+            return False
+        
+        print(f"✅ PASS: Subscription is now active")
+        print(f"   - status: {subscription['status']}")
+        print(f"   - provider: {subscription['provider']}")
+        print(f"   - plan: {subscription['plan']}")
+        print(f"   - interval: {subscription.get('interval')}")
+        
+        # Verify invoice was created
+        print("\nVerifying invoice was created...")
+        inv_resp = session.get(f'{BASE_URL}/api/billing/invoices', timeout=30)
+        if inv_resp.status_code != 200:
+            print(f"❌ FAIL: Failed to get invoices: {inv_resp.status_code}")
+            return False
+        
+        inv_data = inv_resp.json()
+        invoices = inv_data.get('invoices', [])
+        
+        if not invoices:
+            print(f"❌ FAIL: No invoices found")
+            return False
+        
+        # Find the invoice for this payment
+        invoice = None
+        for inv in invoices:
+            if inv.get('provider') == 'razorpay' and inv.get('status') == 'paid':
+                invoice = inv
+                break
+        
+        if not invoice:
+            print(f"❌ FAIL: No paid Razorpay invoice found")
+            print(f"   - Invoices: {json.dumps(invoices, indent=2)}")
+            return False
+        
+        # Verify invoice amount (should be 4999 rupees for starter monthly)
+        expected_amount = 4999
+        if invoice.get('amount') != expected_amount:
+            print(f"❌ FAIL: Expected invoice amount={expected_amount}, got {invoice.get('amount')}")
+            return False
+        
+        print(f"✅ PASS: Invoice created successfully")
+        print(f"   - status: {invoice['status']}")
+        print(f"   - provider: {invoice['provider']}")
+        print(f"   - amount: ₹{invoice['amount']}")
+        print(f"   - currency: {invoice.get('currency')}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ FAIL: Exception: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+def test_7_missing_fields(session):
+    """Test 7: Missing fields should return 400"""
+    print("\n" + "="*80)
+    print("TEST 7: Missing fields in verify (should return 400)")
+    print("="*80)
+    
+    try:
+        resp = session.post(
+            f'{BASE_URL}/api/billing/razorpay/verify',
+            json={},
+            timeout=30
+        )
+        
+        print(f"Status: {resp.status_code}")
+        data = resp.json()
+        print(f"Response: {json.dumps(data, indent=2)}")
+        
+        if resp.status_code != 400:
+            print(f"❌ FAIL: Expected 400, got {resp.status_code}")
+            return False
+        
+        if 'error' not in data:
+            print(f"❌ FAIL: Expected error message in response")
+            return False
+        
+        print(f"✅ PASS: Missing fields correctly rejected with 400")
+        print(f"   - Error: {data['error']}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ FAIL: Exception: {e}")
+        return False
+
+def test_8_cross_org_safety():
+    """Test 8: Cross-org safety - order from one org should not be verifiable by another"""
+    print("\n" + "="*80)
+    print("TEST 8: Cross-org safety (should reject)")
+    print("="*80)
+    
+    # Create first session (session A)
+    print("\nCreating session A...")
+    session_a = create_demo_session()
+    if not session_a:
+        print("❌ FAIL: Could not create session A")
+        return False
+    
+    # Create order with session A
+    print("\nCreating order with session A...")
+    try:
+        resp_a = session_a.post(
+            f'{BASE_URL}/api/billing/razorpay/order',
+            json={'plan': 'starter', 'interval': 'monthly'},
+            timeout=30
+        )
+        
+        if resp_a.status_code != 200:
+            print(f"❌ FAIL: Failed to create order with session A: {resp_a.status_code}")
+            return False
+        
+        order_id_a = resp_a.json().get('orderId')
+        print(f"✅ Order created with session A: {order_id_a}")
+        
+    except Exception as e:
+        print(f"❌ FAIL: Exception creating order: {e}")
+        return False
+    
+    # Create second session (session B)
+    print("\nCreating session B (different org)...")
+    session_b = create_demo_session()
+    if not session_b:
+        print("❌ FAIL: Could not create session B")
+        return False
+    
+    # Try to verify session A's order with session B
+    print("\nTrying to verify session A's order with session B...")
+    try:
+        payment_id = 'pay_test_crossorg'
+        message = f"{order_id_a}|{payment_id}"
+        signature = hmac.new(
+            RAZORPAY_KEY_SECRET.encode(),
+            message.encode(),
+            hashlib.sha256
+        ).hexdigest()
+        
+        print(f"Using valid signature for order: {order_id_a}")
+        
+        resp_b = session_b.post(
+            f'{BASE_URL}/api/billing/razorpay/verify',
+            json={
+                'razorpay_payment_id': payment_id,
+                'razorpay_order_id': order_id_a,
+                'razorpay_signature': signature
+            },
+            timeout=30
+        )
+        
+        print(f"Status: {resp_b.status_code}")
+        data = resp_b.json()
+        print(f"Response: {json.dumps(data, indent=2)}")
+        
+        if resp_b.status_code != 400:
+            print(f"❌ FAIL: Expected 400, got {resp_b.status_code}")
+            return False
+        
+        if 'error' not in data or 'organization' not in data['error'].lower():
+            print(f"❌ FAIL: Expected error about organization mismatch")
+            return False
+        
+        print(f"✅ PASS: Cross-org verification correctly rejected with 400")
+        print(f"   - Error: {data['error']}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ FAIL: Exception: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+def main():
+    print("="*80)
+    print("RAZORPAY STANDARD CHECKOUT INTEGRATION TEST")
+    print("Sprint 2.7 Phase 4B")
+    print("="*80)
+    print(f"Base URL: {BASE_URL}")
+    print(f"Razorpay Key ID: {RAZORPAY_KEY_ID}")
+    print("="*80)
+    
+    results = {}
+    
+    # Test 4 first (doesn't need session)
+    results['test_4_unauthenticated'] = test_4_unauthenticated()
+    
+    # Create demo session for tests 1-7
+    print("\n" + "="*80)
+    print("Creating demo session for tests 1-7...")
+    print("="*80)
+    session = create_demo_session()
+    if not session:
+        print("❌ FATAL: Could not create demo session")
+        sys.exit(1)
+    
+    # Run tests 1-3
+    order_id_starter = test_1_starter_monthly(session)
+    results['test_1_starter_monthly'] = order_id_starter is not None
+    
+    order_id_growth = test_2_growth_yearly(session)
+    results['test_2_growth_yearly'] = order_id_growth is not None
+    
+    results['test_3_enterprise_monthly'] = test_3_enterprise_monthly(session)
+    
+    # Test 5 and 6 use the order from test 1
+    results['test_5_wrong_signature'] = test_5_wrong_signature(session, order_id_starter)
+    results['test_6_correct_signature'] = test_6_correct_signature(session, order_id_starter)
+    
+    # Test 7
+    results['test_7_missing_fields'] = test_7_missing_fields(session)
+    
+    # Test 8 (creates its own sessions)
+    results['test_8_cross_org_safety'] = test_8_cross_org_safety()
+    
+    # Print summary
+    print("\n" + "="*80)
+    print("TEST SUMMARY")
+    print("="*80)
+    
+    passed = 0
+    failed = 0
+    
+    for test_name, result in results.items():
+        status = "✅ PASS" if result else "❌ FAIL"
+        print(f"{status}: {test_name}")
+        if result:
+            passed += 1
+        else:
+            failed += 1
+    
+    print("="*80)
+    print(f"Total: {passed + failed} tests")
+    print(f"Passed: {passed}")
+    print(f"Failed: {failed}")
+    print(f"Success Rate: {passed / (passed + failed) * 100:.1f}%")
+    print("="*80)
+    
+    if failed > 0:
+        sys.exit(1)
     else:
-        print(f"  ✗ FAILED: Expected 200, got {resp.status_code}")
-except Exception as e:
-    print(f"  ✗ EXCEPTION: {e}")
-    test5_pass = False
+        print("\n🎉 ALL TESTS PASSED!")
+        sys.exit(0)
 
-print(f"\n[TEST 5 SUMMARY] {'✓ PASS' if test5_pass else '✗ FAIL'}: Dashboard data accessible after uploads")
-
-# FINAL SUMMARY
-print("\n" + "=" * 80)
-print("FINAL TEST SUMMARY")
-print("=" * 80)
-
-all_tests = [
-    ("TEST 1: First chat reliability (5 questions)", test1_pass),
-    ("TEST 1b: Multi-turn conversation (5 messages)", test1b_pass),
-    ("TEST 2: Invoice upload hardening", test2_pass),
-    ("TEST 3: CSV import hardening", test3_pass),
-    ("TEST 4: Long conversation stability (15 messages)", test4_pass),
-    ("TEST 5: Dashboard auto-refresh data check", test5_pass),
-]
-
-print()
-for test_name, passed in all_tests:
-    status = "✓ PASS" if passed else "✗ FAIL"
-    print(f"{status}: {test_name}")
-
-total_pass = sum(1 for _, p in all_tests if p)
-total_tests = len(all_tests)
-print(f"\n{'=' * 80}")
-print(f"OVERALL: {total_pass}/{total_tests} tests passed ({100*total_pass//total_tests}%)")
-print(f"{'=' * 80}")
-
-if total_pass == total_tests:
-    print("\n🎉 ALL TESTS PASSED - Sprint 2.7 Phase 2 is PRODUCTION READY")
-else:
-    print(f"\n⚠️  {total_tests - total_pass} test(s) failed - review details above")
+if __name__ == '__main__':
+    main()
