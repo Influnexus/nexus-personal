@@ -5,6 +5,7 @@ import { seedService } from '@/lib/services/seed.service';
 import { runCfoAgent } from '@/lib/ai/agent';
 import { BRIEFING_PROMPT } from '@/lib/ai/prompts';
 import { LLMUnavailableError } from '@/lib/ai/provider';
+import { briefingCache } from '@/lib/ai/briefing-cache';
 
 export const runtime = 'nodejs';
 
@@ -38,13 +39,21 @@ export async function GET() {
 
   let briefing = '';
   let aiAvailable = true;
-  try {
-    const trace = await runCfoAgent([{ role: 'user', content: BRIEFING_PROMPT }], { organizationId: orgId }, { maxSteps: 6, temperature: 0.4 });
-    briefing = trace.finalAnswer || fallbackBriefing(kpis, health, overdue, anomalies);
-  } catch (e) {
-    aiAvailable = false;
-    briefing = fallbackBriefing(kpis, health, overdue, anomalies);
-    console.warn('[briefing] AI unavailable, served fallback briefing');
+  const cached = briefingCache.get(orgId);
+  if (cached) {
+    briefing = cached.text;
+    aiAvailable = cached.aiAvailable;
+  } else {
+    try {
+      const trace = await runCfoAgent([{ role: 'user', content: BRIEFING_PROMPT }], { organizationId: orgId }, { maxSteps: 6, temperature: 0.4 });
+      briefing = trace.finalAnswer || fallbackBriefing(kpis, health, overdue, anomalies);
+      briefingCache.set(orgId, briefing, true);
+    } catch (e) {
+      aiAvailable = false;
+      briefing = fallbackBriefing(kpis, health, overdue, anomalies);
+      console.warn('[briefing] AI unavailable, served fallback briefing');
+      // Don't cache the fallback — retry the real LLM call next time rather than being stuck for 10min.
+    }
   }
 
   return NextResponse.json({ briefing, aiAvailable, kpis, health, overdue, anomalies, recs, forecast, breakdown, vendors });

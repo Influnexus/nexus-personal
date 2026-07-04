@@ -4,6 +4,7 @@ import { transactionsRepo } from '@/lib/repositories/transactions';
 import { llm } from '@/lib/ai/provider';
 import { usageService } from '@/lib/billing/usage.service';
 import Papa from 'papaparse';
+import { briefingCache } from '@/lib/ai/briefing-cache';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -113,6 +114,7 @@ export async function POST(req: NextRequest) {
   }))) : 0;
 
   usageService.record(orgId, 'csv_imports').catch(() => {});
+  briefingCache.invalidate(orgId);
   return NextResponse.json({
     imported: inserted,
     skipped: invalidRows,

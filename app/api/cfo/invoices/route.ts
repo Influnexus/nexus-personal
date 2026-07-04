@@ -4,6 +4,7 @@ import { invoicesRepo } from '@/lib/repositories/invoices';
 import { llm } from '@/lib/ai/provider';
 import { usageService } from '@/lib/billing/usage.service';
 import { rateLimit } from '@/lib/rate-limit';
+import { briefingCache } from '@/lib/ai/briefing-cache';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -114,5 +115,6 @@ export async function POST(req: NextRequest) {
   });
 
   usageService.record(orgId, 'invoices_processed').catch(() => {});
+  briefingCache.invalidate(orgId);
   return NextResponse.json({ invoice: inv });
 }
