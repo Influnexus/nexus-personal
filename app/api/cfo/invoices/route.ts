@@ -33,16 +33,24 @@ export async function POST(req: NextRequest) {
   const form = await req.formData();
   const file = form.get('file') as File | null;
   if (!file) return NextResponse.json({ error: 'file required' }, { status: 400 });
-  if (file.size === 0) return NextResponse.json({ error: 'The selected file is empty.' }, { status: 400 });
-  if (file.size > 15 * 1024 * 1024) return NextResponse.json({ error: 'File is too large (max 15MB). Please upload a smaller file.' }, { status: 400 });
+
+  // Analytics: upload lifecycle (event + coarse failure reason only — file contents never logged).
+  const track = (event: 'invoice_upload_started' | 'invoice_upload_completed' | 'invoice_upload_failed', reason?: string) =>
+    trackServer(event, { userId: session.user.id, organizationId: orgId, isDemo: session.user.isDemo, meta: reason ? { reason } : undefined });
+  track('invoice_upload_started');
+
+  if (file.size === 0) { track('invoice_upload_failed', 'empty_file'); return NextResponse.json({ error: 'The selected file is empty.' }, { status: 400 }); }
+  if (file.size > 15 * 1024 * 1024) { track('invoice_upload_failed', 'too_large'); return NextResponse.json({ error: 'File is too large (max 15MB). Please upload a smaller file.' }, { status: 400 }); }
 
   const mime = file.type || 'application/pdf';
   const SUPPORTED = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif'];
   const isHeic = /heic|heif/i.test(mime) || /\.(heic|heif)$/i.test(file.name || '');
   if (isHeic) {
+    track('invoice_upload_failed', 'unsupported_heic');
     return NextResponse.json({ error: 'HEIC/HEIF photos aren\u2019t supported yet \u2014 please convert to JPG or PNG (most phones can do this from the Share menu) and try again.' }, { status: 400 });
   }
   if (!SUPPORTED.includes(mime)) {
+    track('invoice_upload_failed', 'unsupported_type');
     return NextResponse.json({ error: `Unsupported file type "${mime || 'unknown'}". Please upload a PDF, PNG or JPG.` }, { status: 400 });
   }
 

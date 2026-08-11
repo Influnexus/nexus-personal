@@ -78,7 +78,7 @@
         "zod": "3.25.67"
     },
     "devDependencies": {
-        "@types/bcryptjs": "^3.0.0",
+        "@types/bcryptjs": "2.4.6",
         "@types/lodash": "4.17.24",
         "@types/node": "20",
         "@types/react": "18",

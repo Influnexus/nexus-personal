@@ -15,7 +15,7 @@ BASE_URL = "https://nexus-enterprise-ai-2.preview.emergentagent.com"
 
 # Test credentials
 FOUNDER_EMAIL = "founder@nexusai.com"
-FOUNDER_PASSWORD = "FounderPass1234"
+FOUNDER_PASSWORD = open("/app/memory/test_credentials.md").read().split("founder@nexusai.com / ")[1].splitlines()[0].strip()  # never hardcode
 
 def print_test(name, passed, details=""):
     status = "✅ PASS" if passed else "❌ FAIL"
