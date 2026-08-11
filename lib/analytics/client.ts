@@ -36,9 +36,34 @@ export function getSessionStart(): number {
   } catch { return Date.now(); }
 }
 
+// Duplicate-event guard. The first page load can evaluate this module twice (hydration
+// remounts / duplicated chunk instances / rapid double document load), so an in-memory
+// variable alone is not enough — sessionStorage is synchronous and shared across all
+// module copies and reloads within the same tab, making the guard bulletproof.
+let lastKeyMem = '';
+let lastAtMem = 0;
+const DEDUPE_WINDOW_MS = 2000;
+
+function isDuplicate(key: string): boolean {
+  const now = Date.now();
+  if (key === lastKeyMem && now - lastAtMem < DEDUPE_WINDOW_MS) return true;
+  try {
+    const raw = sessionStorage.getItem('nx_last_evt');
+    if (raw) {
+      const sep = raw.lastIndexOf('|');
+      if (sep > 0 && raw.slice(0, sep) === key && now - Number(raw.slice(sep + 1)) < DEDUPE_WINDOW_MS) return true;
+    }
+    sessionStorage.setItem('nx_last_evt', `${key}|${now}`);
+  } catch { /* storage unavailable — fall back to in-memory guard only */ }
+  lastKeyMem = key;
+  lastAtMem = now;
+  return false;
+}
+
 export function track(event: string, meta?: Record<string, string | number | boolean>) {
   if (typeof window === 'undefined') return;
   try {
+    if (isDuplicate(`${event}:${window.location.pathname}`)) return;
     const body = JSON.stringify({
       event,
       visitorId: getVisitorId(),

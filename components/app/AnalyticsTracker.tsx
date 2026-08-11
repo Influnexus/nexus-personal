@@ -20,15 +20,24 @@ const PAGE_EVENTS: { match: (p: string) => boolean; event: string }[] = [
 const HEARTBEAT_MS = 60_000;
 const MAX_HEARTBEATS = 120; // stop after ~2h so idle tabs don't spam forever
 
+// Module-scope dedupe guard: React can mount → unmount → remount this component during
+// hydration or layout transitions, which resets refs and caused double-fired page views.
+// A module-level key + short window survives remounts while still counting genuine
+// repeat visits (different pathname, or same page after >2s of real navigation).
+let lastTrackedKey = '';
+let lastTrackedAt = 0;
+
 export function AnalyticsTracker() {
   const pathname = usePathname();
-  const lastTracked = useRef<string | null>(null);
   const beats = useRef(0);
 
-  // Page-view events (deduped per pathname change)
+  // Page-view events (deduped per pathname change, remount-safe)
   useEffect(() => {
-    if (!pathname || pathname === lastTracked.current) return;
-    lastTracked.current = pathname;
+    if (!pathname) return;
+    const now = Date.now();
+    if (pathname === lastTrackedKey && now - lastTrackedAt < 2000) return;
+    lastTrackedKey = pathname;
+    lastTrackedAt = now;
     const hit = PAGE_EVENTS.find((r) => r.match(pathname));
     if (hit) track(hit.event);
   }, [pathname]);

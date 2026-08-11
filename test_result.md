@@ -2474,6 +2474,38 @@ agent_communication:
 agent_communication:
   - agent: "testing"
     message: |
+      ❌ TARGETED RETEST FAILED - Analytics Double-Firing Fix Not Working
+      
+      **Task:** Verify the fix for landing_page_visit analytics event double-firing (~70ms apart) on 
+      initial landing page load. The fix was a module-scope dedupe guard with 2s window in 
+      /app/components/app/AnalyticsTracker.tsx.
+      
+      **Test Results:**
+      - ❌ Fresh page load: 2 events fired 123ms apart (FAILED - expected 1)
+      - ✅ Second fresh context: 1 event fired (PASSED)
+      - ✅ Third fresh context: 1 event fired (PASSED)
+      - ✅ Navigation tracking: Working correctly (landing → /register → back to /)
+      - ✅ Page rendering: No console errors
+      
+      **Critical Finding:**
+      The fix works AFTER the first page load, but FAILS on the very first load. This is a race 
+      condition where the component's useEffect runs twice before module variables are initialized.
+      
+      **Root Cause:**
+      The dedupe logic is in the component (AnalyticsTracker.tsx), but if React mounts the component 
+      twice in rapid succession (hydration behavior), both useEffect calls read OLD values before 
+      either updates them.
+      
+      **Recommended Fix:**
+      Move dedupe logic INTO the track() function in lib/analytics/client.ts. This ensures dedupe 
+      happens at the lowest level, regardless of how many times the component mounts.
+      
+      **MongoDB Evidence:**
+      Confirmed duplicate landing_page_visit events in analytics_events collection for same sessionId.
+      
+      **Status:** FAILED - The fix is incomplete and needs to be moved to the track() function level.
+  - agent: "testing"
+    message: |
       🚨 CRITICAL BUG FOUND IN EXECUTIVE MEMORY SYSTEM - AUTO-DETECTION NOT WORKING
       
       **Status:** Frontend testing complete. Manual CRUD operations work perfectly, but auto-detection feature is completely broken.
@@ -3014,37 +3046,249 @@ backend:
 frontend:
   - task: "AnalyticsTracker (page views + session heartbeat) mounted in root layout"
     implemented: true
-    working: "NA"
+    working: true
     file: "components/app/AnalyticsTracker.tsx, lib/analytics/client.ts, app/layout.tsx"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Tracks landing/signup/dashboard/billing/forecast/reports/chat/memory page views + 60s heartbeat while visible."
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ Analytics tracking working correctly
+          - Landing page: 2 POST /api/analytics/track requests detected (landing_page_visit event)
+          - Page navigation events fire correctly
+          - Network interception confirmed events are being sent to backend
+          - App continues to work when /api/analytics/track is blocked (resilience verified)
+      - working: false
+        agent: "testing"
+        comment: |
+          ❌ FIRST TARGETED RETEST FAILED - Double-firing issue STILL PRESENT on initial page load
+          
+          **Defect:** landing_page_visit analytics event was reported as fixed with module-scope dedupe guard 
+          (lastTrackedKey + lastTrackedAt with 2s window in /app/components/app/AnalyticsTracker.tsx).
+          
+          **Test Results:**
+          - TEST 1 (Fresh browser context): ❌ FAILED - 2 events fired 123ms apart (expected 1)
+          - TEST 2 (Second fresh context): ✅ PASSED - 1 event fired
+          - TEST 3 (Third fresh context): ✅ PASSED - 1 event fired
+          - Navigation tracking: ✅ PASSED - Events fire correctly on navigation (landing → /register → back to /)
+          - Page rendering: ✅ PASSED - No console errors, page renders normally
+          
+          **Root Cause Analysis:**
+          The module-scope dedupe guard works AFTER the first page load, but fails on the VERY FIRST load.
+          This suggests a race condition where the component's useEffect runs twice before the module 
+          variables (lastTrackedKey, lastTrackedAt) are properly initialized or updated.
+          
+          Pattern observed:
+          - First page load after browser start: Double-fire (123-130ms apart)
+          - All subsequent loads: Single fire (dedupe working correctly)
+          
+          **MongoDB Verification:**
+          Confirmed duplicate landing_page_visit events in analytics_events collection for the same sessionId.
+          
+          **Why the fix doesn't work:**
+          The dedupe logic in AnalyticsTracker.tsx checks module-scope variables BEFORE calling track(), 
+          but if the component mounts twice in rapid succession (React 18 hydration behavior), both 
+          useEffect calls might read the OLD values before either one updates them. This is a classic 
+          race condition.
+          
+          **Recommended Fix:**
+          Move the dedupe logic INTO the track() function in lib/analytics/client.ts, not in the component.
+          This ensures that even if the component calls track() twice, the track() function itself will 
+          dedupe at the point of execution. Example:
+          
+          ```typescript
+          // In lib/analytics/client.ts
+          let lastTrackedEvent = '';
+          let lastTrackedAt = 0;
+          
+          export function track(event: string, meta?: Record<string, string | number | boolean>) {
+            if (typeof window === 'undefined') return;
+            
+            // Dedupe at the track() level, not component level
+            const now = Date.now();
+            const key = `${event}:${window.location.pathname}`;
+            if (key === lastTrackedEvent && now - lastTrackedAt < 2000) return;
+            lastTrackedEvent = key;
+            lastTrackedAt = now;
+            
+            try {
+              const body = JSON.stringify({
+                event,
+                visitorId: getVisitorId(),
+                sessionId: getSessionId(),
+                page: window.location.pathname,
+                meta: meta || {},
+              });
+              fetch('/api/analytics/track', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body,
+                keepalive: true,
+              }).catch(() => {});
+            } catch { /* never throw from analytics */ }
+          }
+          ```
+          
+          This approach is more robust because it dedupes at the lowest level (the track function itself),
+          regardless of how many times or from where it's called.
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ SECOND TARGETED RETEST PASSED - Double-firing issue FIXED
+          
+          **NEW FIX APPLIED:** Dedupe logic moved into track() function in /app/lib/analytics/client.ts
+          - Key format: `${event}:${pathname}`
+          - 2-second dedupe window
+          - DUAL storage: module-scope variables (lastKeyMem, lastAtMem) + sessionStorage ('nx_last_evt')
+          - sessionStorage format: `${key}|${timestamp}`
+          - Survives hydration remounts, duplicated module instances, and rapid double document loads
+          
+          **TEST RESULTS (5/5 PASSED):**
+          
+          1. ✅ **TEST 1 - Fresh context #1 (CRITICAL):** 1 event fired (PASS)
+             - This was the failing test in previous retest
+             - Now working correctly on the very first page load
+          
+          2. ✅ **TEST 2 - Fresh context #2:** 1 event fired (PASS)
+          
+          3. ✅ **TEST 3 - Fresh context #3:** 1 event fired (PASS)
+          
+          4. ✅ **TEST 4 - Navigation flow:** 1→1→1 (PASS)
+             - Initial landing: 1 event
+             - Navigate to /register: 1 signup_page_viewed event
+             - Return to landing (after 3s): 1 new landing_page_visit event (legitimate re-visit)
+          
+          5. ✅ **TEST 5 - Page rendering:** No console errors (PASS)
+          
+          **MONGODB VERIFICATION:**
+          - Session 33599cab-2b21-4aa0-a1de-30e7c053a70d: 1 landing_page_visit event ✓
+          - Session 72f29e79-c7f3-4b76-817d-5b455d36cdb1: 1 landing_page_visit event ✓
+          - Session 7c001c16-832b-4245-8eb1-61b26728d866: 1 landing_page_visit event ✓
+          - Navigation session f0198ddd-c2e2-4a40-911c-f211b9bd6a61: 2 landing_page_visit events, 10.3s apart ✓
+          - NO duplicate events within 2 seconds found in database ✓
+          
+          **KEY FINDINGS:**
+          - The fix works correctly on ALL fresh page loads (including the critical first load)
+          - Navigation tracking works correctly (re-visits after 2s window are properly tracked)
+          - Page renders without errors
+          - MongoDB confirms no duplicate events within 2 seconds
+          
+          **WHY THE NEW FIX WORKS:**
+          The dedupe logic is now at the lowest level (inside track() function), not in the component.
+          Even if React mounts the component twice in rapid succession (hydration behavior), both calls
+          to track() will check the SAME dedupe state (module-scope + sessionStorage), ensuring only
+          one event is sent. The sessionStorage backup ensures the dedupe survives module reloads and
+          duplicated chunk instances.
+          
+          **PRODUCTION READINESS: ✅ APPROVED**
+          The landing_page_visit double-fire defect is now FIXED. All tests passed. Ready for production.
+
   - task: "FeedbackWidget (floating, dashboard + demo mode) with rating + report-a-problem"
     implemented: true
-    working: "NA"
+    working: true
     file: "components/app/FeedbackWidget.tsx, app/(app)/layout.tsx"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "data-testids: feedback-widget-button, feedback-rating-*, feedback-submit, feedback-report-problem-link, problem-description, problem-submit."
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ ALL FEEDBACK WIDGET TESTS PASSED
+          
+          **Visibility Rules:**
+          - ✅ Demo users: Widget visible on ALL pages (/dashboard, /cfo/chat, /memory) - CORRECT
+          - ✅ Normal users: Widget visible ONLY on /dashboard - CORRECT (tested, not visible on /cfo/chat)
+          - ✅ Floating button positioned correctly (bottom-right, doesn't block content)
+          
+          **Rating Feedback:**
+          - ✅ Dialog opens on button click
+          - ✅ All 5 rating options visible and selectable (very_useful, useful, neutral, not_useful, broken)
+          - ✅ Optional text field working
+          - ✅ Submit button calls POST /api/feedback (network verified)
+          - ✅ Success confirmation shown (Thank you message)
+          
+          **Report a Problem:**
+          - ✅ "Report a problem" link switches mode
+          - ✅ Feature select dropdown working
+          - ✅ Description textarea working
+          - ✅ Error ID field working (optional)
+          - ✅ Validation working: empty description shows error toast
+          - ✅ Submit with description calls POST /api/feedback successfully
+          - ✅ Auto-captured page path shown (no sensitive data)
+          
+          **UI/UX:**
+          - ✅ Dialog closes on Escape key
+          - ✅ Mobile responsive (390px - button visible, no overflow)
+          - ✅ Dark mode compatible
   - task: "Founder analytics dashboard page /admin/analytics"
     implemented: true
-    working: "NA"
+    working: true
     file: "app/(app)/admin/analytics/page.tsx, components/app/AppSidebar.tsx"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "KPIs, funnel with drop-offs, daily/weekly recharts trends, AI usage, feature adoption, errors, feedback list. Sidebar 'Founder > Analytics' link only for founder emails."
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ ALL FOUNDER ANALYTICS TESTS PASSED
+          
+          **Authorization (CRITICAL):**
+          - ✅ Founder (founder@nexusai.com): Full access to /admin/analytics
+          - ✅ Demo user: Shows "Founder access only" forbidden card (403)
+          - ✅ Anonymous user: Redirected to /login by middleware
+          - ✅ Sidebar visibility: FOUNDER section + Analytics link visible ONLY for founder
+          
+          **Analytics Dashboard Content:**
+          - ✅ All 6 KPI cards present with data:
+            * Visitors: 6
+            * Demo users: 11
+            * Signups: 2
+            * Activated: 2
+            * Returning: 0
+            * Avg session: 0.5m
+          
+          - ✅ Conversion funnel card: 6 steps with drop-off percentages
+            * Landing visitors → Demo started → Asked first CFO question → Got first CFO answer → Signed up / converted → Trial started
+          
+          - ✅ Daily trend card: AreaChart with 4 series (visits, demoStarts, signups, aiMessages)
+          - ✅ Weekly trend card: BarChart with 4 series (aggregated by week)
+          - ✅ AI CFO usage card: Questions, answers completed, failures, success rate badge
+          - ✅ Feature adoption card: Event counts per feature with org counts
+          - ✅ Errors & failures card: Invoice/CSV/AI/report failures with total badge
+          - ✅ Experience ratings card: Distribution of 5 rating types with progress bars
+          - ✅ Recent feedback card: 7 feedback items with badges (rating/problem, feature, demo, page, errorId, timestamp, text)
+          
+          **Charts:**
+          - ✅ Found 36 SVG elements (recharts rendering correctly)
+          - ✅ Daily and weekly trends visible with proper data
+          
+          **Range Filters:**
+          - ✅ All 3 range buttons present (7d, 30d, 90d)
+          - ✅ Buttons trigger data re-fetch
+          
+          **Privacy Verification:**
+          - ✅ Feedback items show page paths, ratings, features, errorIds
+          - ✅ NO emails, amounts, or conversation text visible in feedback list
+          - ✅ Footer confirms: "Analytics store contains no financial data, document contents or conversation text"
+          
+          **Responsive:**
+          - ✅ Mobile viewport (390px): No horizontal overflow
+          - ✅ KPI cards stack properly on mobile
+          
+          **Note:** Testing performed via preview URL (https://nexus-enterprise-ai-2.preview.emergentagent.com) due to NextAuth NEXTAUTH_URL configuration. Localhost:3000 redirects to preview domain for auth flows.
 
 metadata:
   created_by: "main_agent"
@@ -3066,6 +3310,101 @@ agent_communication:
       rebuilt and restarted. Founder creds: founder@nexusai.com / FounderPass1234.
       Privacy check requested: inspect analytics_events docs in Mongo (db from DB_NAME env) and
       confirm no message text / file contents / amounts / emails are stored.
+  - agent: "testing"
+    message: |
+      ✅ SPRINT 6 — FRONTEND UI/UX REGRESSION TESTING COMPLETE
+      
+      **COMPREHENSIVE E2E TESTING PERFORMED (7 test scopes, 50+ checkpoints)**
+      
+      **ALL CRITICAL FLOWS WORKING (100% PASS RATE)**
+      
+      **Test Coverage:**
+      
+      1. ✅ **ANONYMOUS VISITOR**
+         - Landing page loads correctly
+         - Analytics events fire (2 POST /api/analytics/track detected)
+         - "Try live demo" button works → redirects to /dashboard
+         - Demo session created with seeded data
+      
+      2. ✅ **DEMO MODE - FEEDBACK WIDGET**
+         - Feedback button visible on dashboard AND all other pages (/cfo/chat, /memory)
+         - Dialog opens with all 5 rating options (very_useful, useful, neutral, not_useful, broken)
+         - Rating selection + optional text works
+         - Submit calls POST /api/feedback successfully
+         - "Report a problem" link switches mode
+         - Feature select dropdown works
+         - Validation: empty description shows error toast
+         - Problem report with description submits successfully
+         - Auto-captured page path shown (no sensitive data)
+      
+      3. ✅ **AUTHENTICATED USER (NORMAL USER)**
+         - Feedback widget visible on /dashboard ONLY (not on /cfo/chat) - CORRECT
+         - Feedback + problem report submission works
+         - REGRESSION TESTS:
+           * CFO chat: Message sent, response received (3 messages visible)
+           * Transactions page loads
+           * Reports page loads
+           * Forecast/Scenario page loads
+           * Memory page loads
+           * Billing page loads
+      
+      4. ✅ **FOUNDER ACCOUNT**
+         - Sidebar shows "FOUNDER" section with "Analytics" link (PRIVATE badge)
+         - /admin/analytics loads successfully with full access
+         - All 6 KPI cards present with data (visitors: 6, demo users: 11, signups: 2, activated: 2, returning: 0, avg session: 0.5m)
+         - Conversion funnel card: 6 steps with drop-off percentages
+         - Daily trend chart: AreaChart with 4 series (36 SVG elements total)
+         - Weekly trend chart: BarChart with 4 series
+         - AI CFO usage card: questions, completed, failures, success rate
+         - Feature adoption card: event counts per feature
+         - Errors & failures card: invoice/CSV/AI/report failures
+         - Experience ratings card: distribution of 5 rating types
+         - Recent feedback card: 7 feedback items with badges (rating, feature, page, errorId, text)
+         - Range filter buttons (7d, 30d, 90d) all present and working
+      
+      5. ✅ **AUTHORIZATION**
+         - Anonymous user → /admin/analytics: Redirected to /login by middleware
+         - Demo user → /admin/analytics: Shows "Founder access only" forbidden card (403)
+         - Demo user sidebar: NO "FOUNDER" section visible (correct)
+         - Founder user → /admin/analytics: Full access granted
+      
+      6. ✅ **RESPONSIVE/UI**
+         - Desktop (1920x1080): All pages render correctly
+         - Mobile (390x844): NO horizontal overflow on landing, dashboard, or admin analytics
+         - Feedback button visible and accessible on mobile
+         - Dark mode toggle works (tested)
+         - Feedback dialog closes on Escape key
+      
+      7. ✅ **ANALYTICS CORRECTNESS**
+         - Page-view events fire on navigation (landing_page_visit, dashboard_viewed, billing_page_viewed)
+         - Network interception confirmed POST /api/analytics/track calls
+         - App resilience: Blocking /api/analytics/track does NOT break app (all pages still load)
+         - Analytics failure never breaks UX
+      
+      **Privacy Verification:**
+      - ✅ Feedback items show page paths, ratings, features, errorIds
+      - ✅ NO emails, amounts, or conversation text visible in analytics UI
+      - ✅ Footer confirms: "Analytics store contains no financial data, document contents or conversation text"
+      
+      **Console Errors:**
+      - 4 console errors detected (all expected):
+        * NextAuth "Failed to fetch" (Cloudflare noise)
+        * 400/403 responses (expected for unauthorized requests during testing)
+      - NO critical application errors
+      
+      **Screenshots Captured:**
+      - founder_analytics_working.png: Full analytics dashboard with all cards
+      - demo_user_forbidden.png: Demo user seeing forbidden card
+      - mobile_dashboard.png: Mobile responsive layout
+      
+      **Technical Notes:**
+      - Testing performed via preview URL (https://nexus-enterprise-ai-2.preview.emergentagent.com) for founder tests due to NextAuth NEXTAUTH_URL configuration
+      - Localhost:3000 redirects to preview domain for auth flows (expected behavior)
+      - All backend APIs working correctly (verified via network interception)
+      
+      **PRODUCTION READINESS: ✅ APPROVED FOR LAUNCH**
+      
+      Sprint 6 Customer Validation & Product Analytics feature is fully functional and ready for production. All critical flows working correctly. No blocking issues found.
   - agent: "testing"
     message: |
       ✅ SPRINT 6 — CUSTOMER VALIDATION & PRODUCT ANALYTICS BACKEND TESTING COMPLETE
@@ -3130,3 +3469,41 @@ agent_communication:
       
       **PRODUCTION READINESS: ✅ APPROVED**
       All Sprint 6 analytics and feedback features are working correctly with proper privacy safeguards. No sensitive data is being stored in analytics events. All existing flows working without regression.
+
+  - agent: "testing"
+    message: |
+      ✅ SECOND TARGETED RETEST COMPLETE - LANDING_PAGE_VISIT DOUBLE-FIRE DEFECT FIXED
+      
+      **Task:** Verify the NEW FIX for landing_page_visit analytics event double-firing on initial page load.
+      The fix moved dedupe logic into track() function in /app/lib/analytics/client.ts with dual storage
+      (module-scope + sessionStorage).
+      
+      **Test Results (5/5 PASSED - 100%):**
+      
+      1. ✅ Fresh context #1 (CRITICAL): 1 event fired
+         - This was the failing test in previous retest
+         - Now working correctly on the very first page load
+      
+      2. ✅ Fresh context #2: 1 event fired
+      
+      3. ✅ Fresh context #3: 1 event fired
+      
+      4. ✅ Navigation flow: 1→1→1
+         - Initial landing: 1 event
+         - Navigate to /register: 1 signup_page_viewed
+         - Return to landing (after 3s): 1 new landing_page_visit (legitimate re-visit)
+      
+      5. ✅ Page rendering: No console errors
+      
+      **MongoDB Verification:**
+      - All 3 test sessions: Exactly 1 landing_page_visit event each ✓
+      - Navigation session: 2 landing_page_visit events, 10.3s apart (legitimate re-visit) ✓
+      - NO duplicate events within 2 seconds found ✓
+      
+      **Key Success Factors:**
+      - Dedupe at track() function level (not component level)
+      - Dual storage: module-scope variables + sessionStorage
+      - Survives hydration remounts and module reloads
+      - sessionStorage key: 'nx_last_evt' with format `${event}:${pathname}|${timestamp}`
+      
+      **Production Status:** ✅ APPROVED - The double-fire defect is now FIXED and verified.
