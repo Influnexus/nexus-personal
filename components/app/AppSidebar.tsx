@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, Users, Building2, Bell, Settings, CreditCard, User, Sparkles, MessageSquare, FileText, Receipt, BarChart3, Sliders, Brain } from 'lucide-react';
+import { LayoutDashboard, Users, Building2, Bell, Settings, CreditCard, User, Sparkles, MessageSquare, FileText, Receipt, BarChart3, Sliders, Brain, LineChart } from 'lucide-react';
 import { OrgSwitcher } from './OrgSwitcher';
 
 const aiCfo = [
@@ -25,7 +25,7 @@ const account = [
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
-export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
+export function AppSidebar({ onNavigate, isFounder = false }: { onNavigate?: () => void; isFounder?: boolean }) {
   const pathname = usePathname();
   const Item = ({ href, label, icon: Icon, badge }: any) => {
     const active = pathname === href || pathname?.startsWith(href + '/');
@@ -50,6 +50,12 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
         <nav className="space-y-0.5">{workspace.map(i => <Item key={i.href} {...i} />)}</nav>
         <p className="mt-5 px-2.5 pb-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">Account</p>
         <nav className="space-y-0.5">{account.map(i => <Item key={i.href} {...i} />)}</nav>
+        {isFounder && (
+          <>
+            <p className="mt-5 px-2.5 pb-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">Founder</p>
+            <nav className="space-y-0.5"><Item href="/admin/analytics" label="Analytics" icon={LineChart} badge="PRIVATE" /></nav>
+          </>
+        )}
       </div>
       <div className="p-3">
         <div className="relative overflow-hidden rounded-xl border border-sidebar-border bg-gradient-to-br from-sidebar-accent/60 to-sidebar-accent/20 p-3">

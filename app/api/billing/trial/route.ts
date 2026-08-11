@@ -5,6 +5,7 @@ import { emailTemplates } from '@/lib/billing/email-templates';
 import { PLANS } from '@/lib/billing/plans';
 import { trialStartSchema } from '@/lib/validation/schemas';
 import { orgsRepo } from '@/lib/repositories/organizations';
+import { trackServer } from '@/lib/analytics/track-server';
 
 export const runtime = 'nodejs';
 
@@ -20,6 +21,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const sub = await subscriptionService.startTrial(orgId, session.user.id, parsed.data.plan, parsed.data.interval, parsed.data.region);
+    trackServer('trial_started', { userId: session.user.id, organizationId: orgId, isDemo: session.user.isDemo, meta: { feature: parsed.data.plan } });
     const org = await orgsRepo.findById(orgId);
     // Email is generated but not sent yet — no mailer is configured. Kept here so wiring a
     // provider later (SendGrid/SES) is a one-line change, not a redesign.

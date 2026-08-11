@@ -6,6 +6,7 @@ import { membershipsRepo } from '@/lib/repositories/memberships';
 import { orgsRepo } from '@/lib/repositories/organizations';
 import { demoService } from '@/lib/services/demo.service';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
+import { trackServer } from '@/lib/analytics/track-server';
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
@@ -38,6 +39,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const rl = rateLimit(`demo:${ip}`, 10, 15 * 60_000); // 10 demo workspaces / 15min / IP
         if (!rl.allowed) throw new Error('Too many demo workspaces created — please try again later.');
         const demoUser = await demoService.createDemoWorkspace();
+        trackServer('demo_started', { userId: demoUser.id, isDemo: true });
         return { id: demoUser.id, email: demoUser.email, name: demoUser.name, isDemo: true } as any;
       },
     }),

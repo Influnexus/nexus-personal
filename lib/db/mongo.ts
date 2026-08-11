@@ -37,5 +37,11 @@ async function ensureIndexes(db: Db) {
     db.collection('usage_records').createIndex({ organizationId: 1, metric: 1, period: 1 }, { unique: true }),
     db.collection('payment_methods').createIndex({ organizationId: 1 }),
     db.collection('webhook_events').createIndex({ provider: 1, eventId: 1 }, { unique: true }),
+    // Sprint 6 — product analytics (privacy-safe events) + beta feedback
+    db.collection('analytics_events').createIndex({ event: 1, createdAt: -1 }),
+    db.collection('analytics_events').createIndex({ day: 1, event: 1 }),
+    db.collection('analytics_events').createIndex({ sessionId: 1 }),
+    db.collection('analytics_events').createIndex({ organizationId: 1, createdAt: -1 }),
+    db.collection('feedback').createIndex({ createdAt: -1 }),
   ]);
 }

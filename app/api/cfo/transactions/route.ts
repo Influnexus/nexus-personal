@@ -5,6 +5,7 @@ import { llm } from '@/lib/ai/provider';
 import { usageService } from '@/lib/billing/usage.service';
 import Papa from 'papaparse';
 import { briefingCache } from '@/lib/ai/briefing-cache';
+import { trackServer } from '@/lib/analytics/track-server';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -46,13 +47,20 @@ export async function POST(req: NextRequest) {
   const form = await req.formData();
   const file = form.get('file') as File | null;
   if (!file) return NextResponse.json({ error: 'file required' }, { status: 400 });
+
+  // Analytics: import lifecycle (event + coarse failure reason only — row data never logged).
+  const track = (event: 'csv_import_started' | 'csv_import_completed' | 'csv_import_failed', reason?: string) =>
+    trackServer(event, { userId: session.user.id, organizationId: orgId, isDemo: session.user.isDemo, meta: reason ? { reason } : undefined });
+  track('csv_import_started');
+
   if (!/\.csv$/i.test(file.name) && file.type && !/csv|text\/plain/i.test(file.type)) {
+    track('csv_import_failed', 'unsupported_type');
     return NextResponse.json({ error: 'Please upload a .csv file. Other formats are not supported yet.' }, { status: 400 });
   }
   const text = await file.text();
-  if (!text.trim()) return NextResponse.json({ error: 'The file appears to be empty.' }, { status: 400 });
+  if (!text.trim()) { track('csv_import_failed', 'empty_file'); return NextResponse.json({ error: 'The file appears to be empty.' }, { status: 400 }); }
   const parsed = Papa.parse<Record<string, string>>(text, { header: true, skipEmptyLines: true });
-  if (parsed.data.length === 0) return NextResponse.json({ error: 'CSV parse failed — no rows found. Check the file has a header row (date, description, vendor, amount).' }, { status: 400 });
+  if (parsed.data.length === 0) { track('csv_import_failed', 'parse_failed'); return NextResponse.json({ error: 'CSV parse failed — no rows found. Check the file has a header row (date, description, vendor, amount).' }, { status: 400 }); }
 
   const dateKey = (r: any) => Object.keys(r).find(k => /^date|posted|transaction/i.test(k)) || 'date';
   const descKey = (r: any) => Object.keys(r).find(k => /desc|memo|narration/i.test(k)) || 'description';
@@ -71,6 +79,7 @@ export async function POST(req: NextRequest) {
     rows.push({ date, description, vendor, amount });
   }
   if (rows.length === 0) {
+    track('csv_import_failed', 'no_valid_rows');
     return NextResponse.json({ error: `No valid rows found (${invalidRows} row(s) skipped — check date and amount columns).` }, { status: 400 });
   }
 
@@ -115,6 +124,7 @@ export async function POST(req: NextRequest) {
 
   usageService.record(orgId, 'csv_imports').catch(() => {});
   briefingCache.invalidate(orgId);
+  track('csv_import_completed');
   return NextResponse.json({
     imported: inserted,
     skipped: invalidRows,

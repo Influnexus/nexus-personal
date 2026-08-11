@@ -5,6 +5,7 @@ import { memoriesRepo } from '@/lib/memory/repo';
 import { auditRepo } from '@/lib/repositories/auditLogs';
 import { memoryCreateSchema } from '@/lib/validation/schemas';
 import { MemoryCategory } from '@/lib/db/models';
+import { trackServer } from '@/lib/analytics/track-server';
 
 export const runtime = 'nodejs';
 
@@ -32,6 +33,7 @@ export async function POST(req: NextRequest) {
     source: 'user', agent: 'cfo',
   });
   await auditRepo.log({ userId: session.user.id, organizationId: orgId, action: 'memory.create', metadata: { category: mem.category, label: mem.label } });
+  trackServer('memory_used', { userId: session.user.id, organizationId: orgId, isDemo: session.user.isDemo, meta: { feature: 'create' } });
   return NextResponse.json({ memory: mem });
 }
 

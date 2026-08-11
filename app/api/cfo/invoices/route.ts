@@ -5,6 +5,7 @@ import { llm } from '@/lib/ai/provider';
 import { usageService } from '@/lib/billing/usage.service';
 import { rateLimit } from '@/lib/rate-limit';
 import { briefingCache } from '@/lib/ai/briefing-cache';
+import { trackServer } from '@/lib/analytics/track-server';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -86,9 +87,10 @@ export async function POST(req: NextRequest) {
     });
     parsed = JSON.parse(extractJson(res.content || '{}'));
   } catch (e: any) {
+    track('invoice_upload_failed', 'parse_error');
     return NextResponse.json({ error: 'We couldn\u2019t read this document. Please try a clearer photo/scan or a different file.' }, { status: 500 });
   }
-  if (parsed?.error) return NextResponse.json({ error: 'We couldn\u2019t extract data from this file \u2014 please try a clearer photo or scan.' }, { status: 400 });
+  if (parsed?.error) { track('invoice_upload_failed', 'unreadable'); return NextResponse.json({ error: 'We couldn\u2019t extract data from this file \u2014 please try a clearer photo or scan.' }, { status: 400 }); }
 
   // Duplicate check
   if (parsed.vendor && parsed.invoiceNumber) {
@@ -116,5 +118,6 @@ export async function POST(req: NextRequest) {
 
   usageService.record(orgId, 'invoices_processed').catch(() => {});
   briefingCache.invalidate(orgId);
+  track('invoice_upload_completed');
   return NextResponse.json({ invoice: inv });
 }

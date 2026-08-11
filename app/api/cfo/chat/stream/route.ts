@@ -12,6 +12,7 @@ import { memoryService } from '@/lib/memory/service';
 import { usageService } from '@/lib/billing/usage.service';
 import { rateLimit } from '@/lib/rate-limit';
 import { conversationsRepo } from '@/lib/repositories/conversations';
+import { trackServer } from '@/lib/analytics/track-server';
 import { v4 as uuid } from 'uuid';
 
 export const runtime = 'nodejs';
@@ -71,6 +72,9 @@ export async function POST(req: NextRequest) {
     const firstUser = messages.find((m: any) => m.role === 'user')?.content || 'New conversation';
     convo = await conversationsRepo.create({ organizationId: orgId, userId: session.user.id, title: String(firstUser).slice(0, 60) });
   }
+
+  // Analytics: question asked (event name + ids only — never the message content).
+  trackServer('cfo_question', { userId: session.user.id, organizationId: orgId, isDemo: session.user.isDemo, meta: { first: messages.length === 1 } });
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -143,6 +147,8 @@ export async function POST(req: NextRequest) {
         send('done', { conversationId: convo!.id, toolCalls: usedTools.map(t => ({ name: t.name })) });
         close();
 
+        trackServer('cfo_response_completed', { userId: session.user.id, organizationId: orgId, isDemo: session.user.isDemo });
+
         // Record real usage for billing/gating purposes.
         usageService.record(orgId, 'ai_messages').catch(() => {});
 
@@ -152,6 +158,7 @@ export async function POST(req: NextRequest) {
         memoryService.extractMemoriesFromTurn(orgId, 'cfo', lastUserText, convo!.id).catch(() => {});
       } catch (e: any) {
         const isUnavailable = e instanceof LLMUnavailableError;
+        trackServer('cfo_response_failed', { userId: session.user.id, organizationId: orgId, isDemo: session.user.isDemo, meta: { reason: isUnavailable ? 'ai_unavailable' : 'internal' } });
         send('error', {
           code: isUnavailable ? 'ai_unavailable' : 'internal',
           message: isUnavailable

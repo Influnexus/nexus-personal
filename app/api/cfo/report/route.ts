@@ -3,6 +3,7 @@ import { auth } from '@/auth';
 import { financeService } from '@/lib/services/finance.service';
 import { llm } from '@/lib/ai/provider';
 import { CFO_SYSTEM_PROMPT } from '@/lib/ai/prompts';
+import { trackServer } from '@/lib/analytics/track-server';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -37,12 +38,18 @@ export async function POST() {
 
 Be concise, specific, and use real numbers. End with a one-line confidence statement.`;
 
-  const res = await llm.complete({
-    messages: [
-      { role: 'system', content: CFO_SYSTEM_PROMPT },
-      { role: 'user', content: `${prompt}\n\nCONTEXT:\n${JSON.stringify(ctx).slice(0, 14000)}` },
-    ],
-    temperature: 0.4, max_tokens: 3000,
-  });
-  return NextResponse.json({ markdown: res.content || '', context: ctx });
+  try {
+    const res = await llm.complete({
+      messages: [
+        { role: 'system', content: CFO_SYSTEM_PROMPT },
+        { role: 'user', content: `${prompt}\n\nCONTEXT:\n${JSON.stringify(ctx).slice(0, 14000)}` },
+      ],
+      temperature: 0.4, max_tokens: 3000,
+    });
+    trackServer('report_generated', { userId: session.user.id, organizationId: orgId, isDemo: session.user.isDemo });
+    return NextResponse.json({ markdown: res.content || '', context: ctx });
+  } catch (e: any) {
+    trackServer('report_failed', { userId: session.user.id, organizationId: orgId, isDemo: session.user.isDemo, meta: { reason: 'llm_error' } });
+    return NextResponse.json({ error: 'Report generation failed — please try again in a moment.' }, { status: 500 });
+  }
 }
