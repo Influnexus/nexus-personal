@@ -45,3 +45,10 @@
 - Tests: 17/17 P3 alert+forecast unit tests, 8/8 P2 personal tests, 16/16 enterprise core tests. Backend E2E: 9/9 pass.
 - Enterprise regression: zero changes to /api/cfo/*, enterprise dashboard, enterprise formulas, enterprise transaction categories, enterprise scenario behavior.
 - NOT deployed. Safety: no investment advice, no bank integrations, no regulated financial advice. Projections not presented as guaranteed outcomes.
+
+## Sprint P4 — Decision Simulator (COMPLETE, PENDING USER VALIDATION)
+- Decision Simulator (/personal/scenarios): NL "Can I Afford It?" + manual slider builder.
+- Scenario engine (scenario-personal.ts): 7 levers, deterministic comparison, verdict, alternatives.
+- Verdict: GREEN/YELLOW/ORANGE/RED. LLM: ONLY extracts parameters, never calculates.
+- Tests: 23/23 P4 unit, 9/9 E2E. Enterprise/P1-P3 all passing (64+ unit tests total).
+

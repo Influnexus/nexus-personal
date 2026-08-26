@@ -25,6 +25,9 @@ export const ALLOWED_EVENTS = [
   // Nexus Personal (Sprint P3) — forecast & alerts, no financial values
   'personal_forecast_viewed', 'personal_alerts_viewed', 'personal_alert_opened',
   'personal_forecast_interaction',
+  // Nexus Personal (Sprint P4) — scenarios, no financial values
+  'personal_scenario_started', 'personal_scenario_completed',
+  'personal_scenario_type', 'personal_scenario_alternative_selected',
   // Engagement / meta
   'session_heartbeat', 'feedback_submitted', 'problem_reported',
 ] as const;

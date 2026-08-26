@@ -4982,3 +4982,107 @@ agent_communication:
       
       **VERDICT:** All P3 backend APIs are production-ready. No critical issues found.
 
+
+# ====================================================================
+# Sprint P4 — Decision Simulator
+# ====================================================================
+
+  - task: "P4 - Deterministic scenario engine (lib/core/finance/scenario-personal.ts)"
+    implemented: true
+    working: true
+    file: "lib/core/finance/scenario-personal.ts"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "23/23 unit tests pass. 7 lever types, verdict classification, alternatives generation."
+
+  - task: "P4 - Scenario evaluate API (POST /api/personal/scenarios/evaluate)"
+    implemented: true
+    working: true
+    file: "app/api/personal/scenarios/evaluate/route.ts"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented deterministic scenario evaluation. Returns baseline, scenario, delta, verdict, alternatives, leversApplied."
+      - working: true
+        agent: "testing"
+        comment: "✅ ALL TESTS PASSED. One-time purchase test: baseline.cash=650000, scenario.cash=450000, delta.cash=-200000, verdict.level=orange, delta.surplus=0 (all validations passed). Income change test: income reduced from 200000 to 100000 correctly. Discretionary spending reduction test: surplus improved by 18100 (green verdict). All expected behaviors working correctly."
+
+  - task: "P4 - Scenario parse API (POST /api/personal/scenarios/parse)"
+    implemented: true
+    working: true
+    file: "app/api/personal/scenarios/parse/route.ts"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented LLM-powered natural language parsing. Extracts structured levers from user input."
+      - working: true
+        agent: "testing"
+        comment: "✅ TEST PASSED. Natural language parsing working correctly. Input 'Buy a 2 lakh laptop' correctly extracted oneTimePurchase with amount=200000, date=2026-08-26, description='One-time purchase of a laptop for ₹2,00,000', ambiguous=false. LLM integration working as expected."
+
+  - task: "P4 - Scenarios page (/personal/scenarios)"
+    implemented: true
+    working: "NA"
+    file: "app/(personal)/personal/scenarios/page.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+
+  - task: "P4 - Enterprise regression"
+    implemented: true
+    working: true
+    file: "tests/core/p4.scenario.test.ts"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "23/23 unit tests pass. 7 lever types, verdict classification, alternatives generation."
+      - working: true
+        agent: "testing"
+        comment: "✅ ENTERPRISE REGRESSION PASSED. GET /api/cfo/briefing returns 200 with all required keys: briefing, aiAvailable, kpis, health, overdue, anomalies, recs, forecast, breakdown, vendors. Business demo mode working correctly. No regression detected."
+
+  - agent: "main"
+    message: |
+      Sprint P4 implemented. PRODUCTION BUILD DONE.
+      
+      KEY TEST FLOWS:
+      1. POST /api/personal/scenarios/evaluate with { levers: { oneTimePurchase: { amount: 200000 } } }
+         → returns baseline vs scenario comparison with verdict
+      2. POST /api/personal/scenarios/parse with { input: "Buy a 2 lakh laptop" }
+         → LLM extracts parameters, returns { levers: { oneTimePurchase: { amount: 200000 } } }
+      3. Sliders: POST /api/personal/scenarios/evaluate with { levers: { incomeChangePct: -50 } }
+      4. Unauthenticated requests → 401
+      5. Enterprise regression must pass
+      
+      DEMO PROFILE: healthy (income 2L, essential 82K, cash 6.5L, resilience 7.9mo)
+      Test creds in /app/memory/test_credentials.md. Demo rate limit 10/15min/IP.
+      
+      UNIT TESTS: 23/23 P4 pass, 17/17 P3 pass, 8/8 P2 pass, 16/16 enterprise pass (64 total).
+
+  - agent: "testing"
+    message: |
+      Sprint P4 backend testing complete. ALL 9 TESTS PASSED (100%).
+      
+      TESTED:
+      1. ✅ POST /api/personal/scenarios/evaluate - One-time purchase (all validations passed)
+      2. ✅ POST /api/personal/scenarios/evaluate - Income change (income reduced correctly)
+      3. ✅ POST /api/personal/scenarios/evaluate - Discretionary spending reduction (surplus improved)
+      4. ✅ POST /api/personal/scenarios/parse - Natural language parsing (LLM extracted correctly)
+      5. ✅ Unauthenticated /api/personal/scenarios/evaluate → 401
+      6. ✅ Unauthenticated /api/personal/scenarios/parse → 401
+      7. ✅ Enterprise regression - GET /api/cfo/briefing (all keys present)
+      8. ✅ P3 regression - GET /api/personal/forecast (structure correct)
+      9. ✅ P3 regression - GET /api/personal/alerts (structure correct)
+      
+      NO CRITICAL ISSUES FOUND. All backend APIs working correctly.

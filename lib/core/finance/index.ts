@@ -10,3 +10,4 @@ export * from './scenario';
 export * from './resilience';
 export * from './personal';
 export * from './alerts';
+export * from './scenario-personal';
