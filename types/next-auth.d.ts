@@ -11,6 +11,7 @@ declare module "next-auth" {
       role?: string | null;
       isDemo?: boolean;
       demoExpiresAt?: string | null;
+      workspaceKind?: 'business' | 'personal';
     };
   }
   interface User {
@@ -29,5 +30,6 @@ declare module "next-auth/jwt" {
     role?: string | null;
     isDemo?: boolean;
     demoExpiresAt?: string | null;
+    workspaceKind?: 'business' | 'personal';
   }
 }

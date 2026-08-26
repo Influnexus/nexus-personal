@@ -19,6 +19,9 @@ export interface OrganizationDoc {
   ownerId: string;
   logoUrl?: string;
   plan?: 'free' | 'pro' | 'enterprise';
+  // Sprint P1: workspace kind. ABSENT = 'business' (all pre-existing orgs behave exactly as
+  // before — no migration required). 'personal' marks a Nexus Personal workspace.
+  kind?: 'business' | 'personal';
   isDemo?: boolean;
   demoExpiresAt?: Date | null;
   createdAt: Date;

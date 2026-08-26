@@ -7,11 +7,11 @@ const col = async () => (await getDb()).collection<OrganizationDoc>('organizatio
 export const orgsRepo = {
   async findById(id: string) { return (await col()).findOne({ id }); },
   async findBySlug(slug: string) { return (await col()).findOne({ slug }); },
-  async create(data: { name: string; slug: string; ownerId: string; isDemo?: boolean; demoExpiresAt?: Date | null }) {
+  async create(data: { name: string; slug: string; ownerId: string; isDemo?: boolean; demoExpiresAt?: Date | null; kind?: 'business' | 'personal' }) {
     const now = new Date();
     const doc: OrganizationDoc = {
       id: uuid(), name: data.name, slug: data.slug,
-      ownerId: data.ownerId, plan: 'free', isDemo: data.isDemo, demoExpiresAt: data.demoExpiresAt,
+      ownerId: data.ownerId, plan: 'free', kind: data.kind ?? 'business', isDemo: data.isDemo, demoExpiresAt: data.demoExpiresAt,
       createdAt: now, updatedAt: now,
     };
     await (await col()).insertOne(doc as any);

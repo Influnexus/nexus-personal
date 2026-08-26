@@ -54,8 +54,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (memberships[0]) {
           token.activeOrgId = memberships[0].organizationId;
           token.role = memberships[0].role;
+          const org = await orgsRepo.findById(memberships[0].organizationId);
+          token.workspaceKind = org?.kind === 'personal' ? 'personal' : 'business';
           if (token.isDemo) {
-            const org = await orgsRepo.findById(memberships[0].organizationId);
             token.demoExpiresAt = org?.demoExpiresAt ? new Date(org.demoExpiresAt).toISOString() : null;
           }
         }
@@ -65,6 +66,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.activeOrgId = session.activeOrgId;
           const m = await membershipsRepo.find(token.id as string, session.activeOrgId);
           token.role = m?.role ?? null;
+          const org = await orgsRepo.findById(session.activeOrgId);
+          token.workspaceKind = org?.kind === 'personal' ? 'personal' : 'business';
         }
         if (session?.refreshDemo === false) {
           token.isDemo = false;
@@ -80,6 +83,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.role = (token.role as string) ?? null;
         session.user.isDemo = !!token.isDemo;
         session.user.demoExpiresAt = (token.demoExpiresAt as string) ?? null;
+        session.user.workspaceKind = (token.workspaceKind as 'business' | 'personal') ?? 'business';
       }
       return session;
     },

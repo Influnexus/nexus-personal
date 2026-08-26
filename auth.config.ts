@@ -9,7 +9,7 @@ export const authConfig: NextAuthConfig = {
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;
-      const protectedPaths = ['/dashboard','/organization','/team','/profile','/settings','/billing','/notifications'];
+      const protectedPaths = ['/dashboard','/organization','/team','/profile','/settings','/billing','/notifications','/personal'];
       const isProtected = protectedPaths.some(p => nextUrl.pathname.startsWith(p));
       if (isProtected) return isLoggedIn;
       if ((nextUrl.pathname === '/login' || nextUrl.pathname === '/register') && isLoggedIn) {
