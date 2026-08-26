@@ -18,6 +18,13 @@ export const ALLOWED_EVENTS = [
   'memory_page_viewed', 'memory_used',
   // Monetization
   'billing_page_viewed',
+  // Nexus Personal (Sprint P2) — events only, never financial values
+  'personal_onboarding_started', 'personal_onboarding_completed', 'personal_demo_started',
+  'personal_dashboard_viewed', 'personal_health_viewed', 'personal_resilience_viewed',
+  'personal_transaction_imported',
+  // Nexus Personal (Sprint P3) — forecast & alerts, no financial values
+  'personal_forecast_viewed', 'personal_alerts_viewed', 'personal_alert_opened',
+  'personal_forecast_interaction',
   // Engagement / meta
   'session_heartbeat', 'feedback_submitted', 'problem_reported',
 ] as const;

@@ -5,7 +5,7 @@ import requests
 import json
 import os
 
-BASE_URL = os.getenv('NEXT_PUBLIC_BASE_URL', 'https://nexus-enterprise-ai-2.preview.emergentagent.com')
+BASE_URL = os.getenv('NEXT_PUBLIC_BASE_URL', 'https://financial-health-hub-17.preview.emergentagent.com')
 API_URL = f"{BASE_URL}/api"
 
 # Get demo session

@@ -8,7 +8,7 @@ import json
 import time
 import io
 
-BASE_URL = "https://nexus-enterprise-ai-2.preview.emergentagent.com"
+BASE_URL = "https://financial-health-hub-17.preview.emergentagent.com"
 
 def test_1_ai_health_initial():
     """TEST 1: GET /api/ai/health - verify fallbackModels and perModel availability"""

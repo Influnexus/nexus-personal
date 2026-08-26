@@ -12,6 +12,22 @@ export interface UserDoc {
   updatedAt: Date;
 }
 
+// Sprint P2 — minimal personal financial profile captured at onboarding (no bank credentials,
+// no unnecessary PII). Stored on the personal organization document.
+export interface PersonalProfile {
+  monthlyIncome: number;
+  essentialMonthly: number;
+  discretionaryMonthly: number;
+  cash: number;
+  investments: number;
+  totalDebt: number;
+  monthlyDebtPayment: number;
+  sipMonthly?: number;
+  goal?: string | null;
+  currency: string;
+  updatedAt: Date;
+}
+
 export interface OrganizationDoc {
   id: string;
   name: string;
@@ -22,6 +38,7 @@ export interface OrganizationDoc {
   // Sprint P1: workspace kind. ABSENT = 'business' (all pre-existing orgs behave exactly as
   // before — no migration required). 'personal' marks a Nexus Personal workspace.
   kind?: 'business' | 'personal';
+  personalProfile?: PersonalProfile;
   isDemo?: boolean;
   demoExpiresAt?: Date | null;
   createdAt: Date;

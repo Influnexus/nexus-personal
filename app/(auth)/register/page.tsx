@@ -77,7 +77,10 @@ export default function RegisterPage() {
     setStatus({ kind: 'success' });
     toast.success('Welcome to NexusAI \u2014 your workspace is ready.');
     // Try Next router first; fall back to a hard navigation so the user can never get stuck.
-    try { router.push('/organization'); router.refresh(); } catch { /* ignore */ }
+    // Sprint P2: if the user arrived via the "For you" chooser (?product=personal), continue
+    // into the Personal onboarding instead of the business org setup. Default flow unchanged.
+    const isPersonal = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('product') === 'personal';
+    try { router.push(isPersonal ? '/personal/onboarding' : '/organization'); router.refresh(); } catch { /* ignore */ }
     setTimeout(() => {
       if (typeof window !== 'undefined' && window.location.pathname.startsWith('/register')) {
         window.location.href = '/organization';

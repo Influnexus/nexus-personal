@@ -25,7 +25,7 @@ import hmac
 from io import BytesIO
 
 # Base URL from .env
-BASE_URL = "https://nexus-enterprise-ai-2.preview.emergentagent.com"
+BASE_URL = "https://financial-health-hub-17.preview.emergentagent.com"
 
 def create_demo_session():
     """Create a demo session using the demo-mode flow"""

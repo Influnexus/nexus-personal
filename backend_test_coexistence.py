@@ -14,7 +14,7 @@ import hashlib
 import time
 from pymongo import MongoClient
 
-BASE_URL = "https://nexus-enterprise-ai-2.preview.emergentagent.com"
+BASE_URL = "https://financial-health-hub-17.preview.emergentagent.com"
 
 def random_id(prefix=''):
     return prefix + ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))

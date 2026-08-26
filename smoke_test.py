@@ -11,7 +11,7 @@ import json
 import sys
 from datetime import datetime
 
-BASE_URL = "https://nexus-enterprise-ai-2.preview.emergentagent.com"
+BASE_URL = "https://financial-health-hub-17.preview.emergentagent.com"
 
 def random_string(length=8):
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))

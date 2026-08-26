@@ -11,7 +11,7 @@ import hmac
 import hashlib
 from datetime import datetime
 
-BASE_URL = "https://nexus-enterprise-ai-2.preview.emergentagent.com"
+BASE_URL = "https://financial-health-hub-17.preview.emergentagent.com"
 
 # Test credentials
 FOUNDER_EMAIL = "founder@nexusai.com"

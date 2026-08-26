@@ -14,7 +14,7 @@ from typing import Dict, Any
 # NOTE: Review request asks for localhost:3000, but NextAuth requires consistent domain for CSRF/cookies.
 # Using preview URL for all requests since NEXTAUTH_URL is configured for preview domain.
 # Localhost auth fails with "MissingCSRF" error due to domain mismatch.
-BASE_URL = "https://nexus-enterprise-ai-2.preview.emergentagent.com"
+BASE_URL = "https://financial-health-hub-17.preview.emergentagent.com"
 
 # Test results tracking
 test_results = []

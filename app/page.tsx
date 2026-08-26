@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { MarketingHeader } from '@/components/marketing/MarketingHeader';
 import { Button } from '@/components/ui/button';
 import { DemoButton } from '@/components/app/DemoButton';
-import { ArrowRight, Sparkles, ShieldCheck, Workflow, Layers, Zap, LineChart } from 'lucide-react';
+import { PersonalDemoButton } from '@/components/personal/PersonalDemoButton';
+import { ArrowRight, Sparkles, ShieldCheck, Workflow, Layers, Zap, LineChart, Building2, Wallet } from 'lucide-react';
 
 export default function LandingPage() {
   return (
@@ -31,6 +32,26 @@ export default function LandingPage() {
             </Link>
           </div>
           <p className="mt-5 text-xs text-muted-foreground">SOC 2 Type II · GDPR ready · 99.99% uptime SLA</p>
+
+          {/* Product chooser — Sprint P2.9 */}
+          <div className="mx-auto mt-12 grid max-w-3xl gap-4 text-left sm:grid-cols-2" data-testid="product-chooser">
+            <div className="rounded-2xl border border-border bg-background/60 p-6 backdrop-blur transition-shadow hover:shadow-md" data-testid="chooser-business">
+              <div className="flex items-center gap-2 text-sm font-semibold"><Building2 className="h-4 w-4" /> For your business</div>
+              <p className="mt-1.5 text-sm text-muted-foreground">An AI CFO that forecasts cash, reads invoices and answers like a real finance leader.</p>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <DemoButton size="sm" variant="default" className="px-4" label="Try business demo" />
+                <Link href="/register" className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">Start for free →</Link>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-border bg-background/60 p-6 backdrop-blur transition-shadow hover:shadow-md" data-testid="chooser-personal">
+              <div className="flex items-center gap-2 text-sm font-semibold"><Wallet className="h-4 w-4" /> For you</div>
+              <p className="mt-1.5 text-sm text-muted-foreground">Nexus Personal — know your financial health, resilience and what changed, in minutes.</p>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <PersonalDemoButton className="h-9 px-4 text-sm" label="Try the Personal demo" />
+                <Link href="/register?product=personal" className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline" data-testid="personal-get-started">Get started →</Link>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 

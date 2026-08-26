@@ -5,7 +5,7 @@ Sprint 2.7 Phase 2 - TEST 3: CSV Import Hardening
 import requests
 import io
 
-BASE_URL = "https://nexus-enterprise-ai-2.preview.emergentagent.com"
+BASE_URL = "https://financial-health-hub-17.preview.emergentagent.com"
 
 def create_demo_session():
     s = requests.Session()

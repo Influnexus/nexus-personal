@@ -9,7 +9,7 @@ import json
 import sys
 
 # Base URL from .env
-BASE_URL = "https://nexus-enterprise-ai-2.preview.emergentagent.com"
+BASE_URL = "https://financial-health-hub-17.preview.emergentagent.com"
 
 def print_test(msg):
     print(f"\n{'='*80}")

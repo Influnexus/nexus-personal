@@ -1,7 +1,7 @@
 ================================================================================
 SPRINT P1 VERIFICATION - ENTERPRISE REGRESSION + PERSONAL WORKSPACE
 ================================================================================
-API URL: https://nexus-enterprise-ai-2.preview.emergentagent.com/api
+API URL: https://financial-health-hub-17.preview.emergentagent.com/api
 MongoDB: mongodb://localhost:27017/nexusai
 
 ✅ MongoDB connection established

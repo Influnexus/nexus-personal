@@ -9,7 +9,7 @@ import string
 import io
 from PIL import Image
 
-BASE_URL = "https://nexus-enterprise-ai-2.preview.emergentagent.com"
+BASE_URL = "https://financial-health-hub-17.preview.emergentagent.com"
 
 def random_id(length=8):
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))

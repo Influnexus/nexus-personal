@@ -24,3 +24,24 @@
 - Tests: 16/16 core unit tests (npx tsx --test tests/core/finance.core.test.ts, tsx devDep). Backend agent: Enterprise regression 8/8, P1 acceptance pass incl. business+personal coexistence (register does NOT auto-create org — orgs via POST /api/organizations, pre-existing behavior).
 - NOT deployed. Enterprise untouched: no /api/cfo/* changes, no sidebar changes, scenario UI unchanged (core scenario.ts exists but not yet wired).
 - P2 scope proposal: personal onboarding+demo seed, personal CSV taxonomy, Personal State/Health UI dashboard, personal layout shell.
+
+
+## Sprint P2 — Nexus Personal Experience (COMPLETE, USER-VALIDATED)
+- Personal Demo Mode: fictional data (₹ profile, demo-labeled vendors) via demo provider ?product=personal.
+- Personal onboarding: profile wizard → seed transactions → dashboard redirect.
+- Personal dashboard: Financial Health (95/100 transparent 5-factor model), Resilience (7.9 months), Monthly surplus, What Changed, Spending breakdown (categories, essential/discretionary/fixed), Financial position (cash/investments/debt/net worth).
+- Personal transaction taxonomy: 14 categories (Income, Housing, Groceries, Utilities, Transportation, Dining, Subscriptions, Health, Insurance, Debt, Entertainment, Shopping, Investments, Other). Essential vs discretionary classification.
+- Tests: 8/8 personal core unit tests, 18/18 backend E2E tests. Enterprise regression: 16/16 core, all CFO routes intact.
+- P2 user validation: ALL acceptance criteria passed (health, resilience, surplus, what-changed, spending, position, demo mode, landing chooser).
+
+## Sprint P3 — Forecast + Proactive Financial Alerts (COMPLETE, PENDING USER VALIDATION)
+- 90-day cash forecast (/personal/forecast): reuses shared forecastCash() engine, 90-day chart (recharts), milestone display (30d/60d/90d), 4 key metric cards, forecast drivers with monthly amounts, deterministic explanation. Known vs Projected distinction.
+- Deterministic alert engine (lib/core/finance/alerts.ts): 8 alert types (LOW_RESILIENCE, PROJECTED_CASH_DECLINE, PROJECTED_CASH_LOW, SPENDING_INCREASE, CATEGORY_OVERSPEND, LARGE_ANOMALY, UPCOMING_MAJOR_EXPENSE, SAVINGS_IMPROVED). 3 severity levels (CRITICAL, WARNING, INFO). Documented thresholds. Dedup logic. Noise prevention.
+- Dashboard alerts ("Needs your attention"): max 3 highest-priority alerts, links to /personal/alerts.
+- Alerts page (/personal/alerts): organized by severity, expandable detail view with WHAT/WHY/WHAT-NEXT.
+- What Changed improvement (P3.9): savings_rate_change detection added to feed.
+- Analytics: 4 new privacy-safe events (personal_forecast_viewed, personal_alerts_viewed, personal_alert_opened, personal_forecast_interaction). No financial values in metadata.
+- Navigation: Forecast + Alerts added to personal layout header.
+- Tests: 17/17 P3 alert+forecast unit tests, 8/8 P2 personal tests, 16/16 enterprise core tests. Backend E2E: 9/9 pass.
+- Enterprise regression: zero changes to /api/cfo/*, enterprise dashboard, enterprise formulas, enterprise transaction categories, enterprise scenario behavior.
+- NOT deployed. Safety: no investment advice, no bank integrations, no regulated financial advice. Projections not presented as guaranteed outcomes.

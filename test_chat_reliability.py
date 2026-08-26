@@ -6,7 +6,7 @@ Test 5 different financial questions to validate the critical fix
 import requests
 import json
 
-BASE_URL = "https://nexus-enterprise-ai-2.preview.emergentagent.com"
+BASE_URL = "https://financial-health-hub-17.preview.emergentagent.com"
 
 def create_demo_session():
     s = requests.Session()

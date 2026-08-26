@@ -11,6 +11,7 @@ import { invoicesRepo } from '@/lib/repositories/invoices';
 import { conversationsRepo } from '@/lib/repositories/conversations';
 import { auditRepo } from '@/lib/repositories/auditLogs';
 import { seedService } from '@/lib/services/seed.service';
+import { personalSeedService, PERSONAL_DEMO_PROFILE } from '@/lib/services/personal-seed.service';
 
 const DEMO_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -54,6 +55,32 @@ export const demoService = {
     await auditRepo.log({ userId: user.id, organizationId: org.id, action: 'demo.start' });
 
     return { id: user.id, email, name: 'Demo User', isDemo: true, organizationId: org.id, demoExpiresAt: org.demoExpiresAt };
+  },
+
+  // Sprint P2 — Personal Demo Mode. Same ephemeral machinery as the Enterprise demo, but the
+  // workspace is kind='personal' and seeded with clearly fictional personal finances (₹).
+  async createPersonalDemoWorkspace() {
+    this.cleanupExpired().catch(() => {});
+
+    const rid = uuid().slice(0, 8);
+    const email = `demo_personal_${rid}@nexusai.demo`;
+    const passwordHash = await bcrypt.hash(uuid(), 10);
+    const user = await usersRepo.create({ email, name: 'Aarav (Demo)', passwordHash, isDemo: true });
+
+    const org = await orgsRepo.create({
+      name: 'Aarav\u2019s Money (Demo)',
+      slug: `demo-personal-${rid}`,
+      ownerId: user.id,
+      kind: 'personal',
+      isDemo: true,
+      demoExpiresAt: new Date(Date.now() + DEMO_TTL_MS),
+    });
+    await membershipsRepo.create({ userId: user.id, organizationId: org.id, role: 'OWNER' });
+    await orgsRepo.update(org.id, { personalProfile: { ...PERSONAL_DEMO_PROFILE, updatedAt: new Date() } } as any);
+    await personalSeedService.seedFromProfile(org.id, PERSONAL_DEMO_PROFILE, { demo: true });
+    await auditRepo.log({ userId: user.id, organizationId: org.id, action: 'demo.personal.start' });
+
+    return { id: user.id, email, name: 'Aarav (Demo)', isDemo: true, organizationId: org.id, demoExpiresAt: org.demoExpiresAt };
   },
 
   // Converts the ephemeral demo user into a permanent account IN PLACE — the org, its

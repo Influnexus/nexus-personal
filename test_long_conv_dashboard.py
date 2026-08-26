@@ -6,7 +6,7 @@ import requests
 import json
 import time
 
-BASE_URL = "https://nexus-enterprise-ai-2.preview.emergentagent.com"
+BASE_URL = "https://financial-health-hub-17.preview.emergentagent.com"
 
 def create_demo_session():
     s = requests.Session()

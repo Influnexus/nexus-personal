@@ -15,6 +15,9 @@ const PAGE_EVENTS: { match: (p: string) => boolean; event: string }[] = [
   { match: (p) => p === '/cfo/reports', event: 'reports_page_viewed' },
   { match: (p) => p === '/cfo/chat', event: 'cfo_chat_viewed' },
   { match: (p) => p === '/memory', event: 'memory_page_viewed' },
+  // Nexus Personal (Sprint P2)
+  { match: (p) => p === '/personal', event: 'personal_dashboard_viewed' },
+  { match: (p) => p === '/personal/onboarding', event: 'personal_onboarding_started' },
 ];
 
 const HEARTBEAT_MS = 60_000;

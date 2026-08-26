@@ -385,7 +385,7 @@ backend:
           
           7. ✅ Unauthenticated access (401) - Both /api/cfo/briefing and /api/cfo/chat/stream return 401
           
-          **Note:** Tests executed against preview URL (https://nexus-enterprise-ai-2.preview.emergentagent.com) instead of localhost:3000 due to NextAuth CSRF/cookie domain configuration. Localhost auth fails with "MissingCSRF" error because NEXTAUTH_URL is configured for preview domain.
+          **Note:** Tests executed against preview URL (https://financial-health-hub-17.preview.emergentagent.com) instead of localhost:3000 due to NextAuth CSRF/cookie domain configuration. Localhost auth fails with "MissingCSRF" error because NEXTAUTH_URL is configured for preview domain.
           
           **All AI CFO backend endpoints are production-ready. No critical issues found.**
 
@@ -1936,7 +1936,7 @@ backend:
           **COMPREHENSIVE BACKEND TESTING PERFORMED:**
           
           **Test Environment:**
-          - Base URL: https://nexus-enterprise-ai-2.preview.emergentagent.com
+          - Base URL: https://financial-health-hub-17.preview.emergentagent.com
           - Authentication: Demo mode flow (GET /api/auth/csrf → POST /api/auth/callback/demo)
           - Test script: /app/backend_test_billing.py
           
@@ -2374,7 +2374,7 @@ agent_communication:
       ✅ DEPLOYMENT SMOKE TEST COMPLETE - ALL 5 CHECKS PASSED (100%)
       
       Performed quick smoke test after yarn build + supervisor restart (production mode).
-      Base URL: https://nexus-enterprise-ai-2.preview.emergentagent.com
+      Base URL: https://financial-health-hub-17.preview.emergentagent.com
       
       **Test Results:**
       1. ✅ Health Check - GET /api/health returns 200 {"status":"ok"}
@@ -2391,7 +2391,7 @@ agent_communication:
       ✅ SPRINT 2.2 FOCUSED VERIFICATION PASS - ALL 8 TESTS PASSED (100%)
       
       Pre-production sanity check for endpoints NOT covered in previous smoke test.
-      Base URL: https://nexus-enterprise-ai-2.preview.emergentagent.com
+      Base URL: https://financial-health-hub-17.preview.emergentagent.com
       Test user: betaready_bkvu0nlw@nexusai.com / TestPassword1234
       Test org: betaorgoh3u2u (id: 44337e06-90a6-4f24-9b20-d1679842825a)
       
@@ -2414,7 +2414,7 @@ agent_communication:
       ✅ DEMO MODE FEATURE TEST COMPLETE - ALL 9 TESTS PASSED (100%)
       
       Tested new Demo Mode feature (NextAuth credentials provider id='demo').
-      Base URL: https://nexus-enterprise-ai-2.preview.emergentagent.com
+      Base URL: https://financial-health-hub-17.preview.emergentagent.com
       Test script: /app/backend_test_demo.py
       
       **Test Coverage:**
@@ -2441,7 +2441,7 @@ agent_communication:
     message: |
       ✅ SPRINT 2.7 PHASE 2 BACKEND TESTING COMPLETE - ALL 6 TESTS PASSED (100%)
       
-      Tested new production hardening features for AI CFO. Base URL: https://nexus-enterprise-ai-2.preview.emergentagent.com
+      Tested new production hardening features for AI CFO. Base URL: https://financial-health-hub-17.preview.emergentagent.com
       Test scripts: test_chat_reliability.py, test_invoice_hardening.py, test_csv_hardening.py, test_long_conv_dashboard.py
       
       **Test Coverage:**
@@ -2489,7 +2489,7 @@ agent_communication:
       
       **Release Candidate Validation Summary:**
       Performed comprehensive E2E testing of the NexusAI CFO experience after Sprint 2.7 Phase 2 (AI reliability fixes + upload hardening).
-      Base URL: https://nexus-enterprise-ai-2.preview.emergentagent.com
+      Base URL: https://financial-health-hub-17.preview.emergentagent.com
       
       **Test Coverage:**
       1. ✅ Landing page - hero, Try Demo buttons (hero + header)
@@ -2951,7 +2951,7 @@ agent_communication:
         ✅ SPRINT 6 E2E REGRESSION RERUN COMPLETE - ALL 9 CHECKPOINTS PASSED (100%)
         
         **COMPREHENSIVE E2E TESTING PERFORMED:**
-        Base URL: https://nexus-enterprise-ai-2.preview.emergentagent.com (preview domain used exclusively)
+        Base URL: https://financial-health-hub-17.preview.emergentagent.com (preview domain used exclusively)
         
         **✅ ALL 9 CHECKPOINTS PASSED (100%):**
         
@@ -3074,7 +3074,7 @@ agent_communication:
         2. **Using wait_until="networkidle"** - App has periodic analytics and SSE streams, network never idles
         
         **FIXES APPLIED:**
-        1. ✅ Used ONLY preview domain (https://nexus-enterprise-ai-2.preview.emergentagent.com) for all tests
+        1. ✅ Used ONLY preview domain (https://financial-health-hub-17.preview.emergentagent.com) for all tests
         2. ✅ Used domcontentloaded/load + wait_for_selector instead of networkidle
         3. ✅ Reused ONE demo session for all demo checks (rate limit consideration)
         
@@ -3846,7 +3846,7 @@ frontend:
           - ✅ Mobile viewport (390px): No horizontal overflow
           - ✅ KPI cards stack properly on mobile
           
-          **Note:** Testing performed via preview URL (https://nexus-enterprise-ai-2.preview.emergentagent.com) due to NextAuth NEXTAUTH_URL configuration. Localhost:3000 redirects to preview domain for auth flows.
+          **Note:** Testing performed via preview URL (https://financial-health-hub-17.preview.emergentagent.com) due to NextAuth NEXTAUTH_URL configuration. Localhost:3000 redirects to preview domain for auth flows.
 
 metadata:
   created_by: "main_agent"
@@ -3956,7 +3956,7 @@ agent_communication:
       - mobile_dashboard.png: Mobile responsive layout
       
       **Technical Notes:**
-      - Testing performed via preview URL (https://nexus-enterprise-ai-2.preview.emergentagent.com) for founder tests due to NextAuth NEXTAUTH_URL configuration
+      - Testing performed via preview URL (https://financial-health-hub-17.preview.emergentagent.com) for founder tests due to NextAuth NEXTAUTH_URL configuration
       - Localhost:3000 redirects to preview domain for auth flows (expected behavior)
       - All backend APIs working correctly (verified via network interception)
       
@@ -4557,3 +4557,428 @@ agent_communication:
       - ✅ Coexistence of business and personal orgs (CORRECTED test passed)
       
       **NO ISSUES FOUND. Sprint P1 is production-ready.**
+
+# ============================================================
+# SPRINT P2 — Nexus Personal MVP (current)
+# ============================================================
+
+user_problem_statement: |
+  Sprint P2: first real Nexus Personal experience on the shared core. Personal onboarding
+  (7 numbers + optional goal -> seeds deterministic history), Personal Demo Mode (INR fictional
+  data), personal transactions (existing repo + personal taxonomy CSV import), Personal State/
+  Health/Resilience (all deterministic, no LLM math), calm personal dashboard, landing product
+  chooser, personal analytics events. Enterprise MUST remain unchanged (P2.12).
+  Unit tests: 8/8 personal core + 16/16 P1 core pass. Personal demo smoke-tested by main agent
+  (66 txs, cash 650000, dashboard 200, resilience 7.9).
+
+backend:
+  - task: "Personal Demo Mode — POST /api/auth/callback/demo with product=personal creates kind='personal' demo workspace with seeded INR data"
+    implemented: true
+    working: true
+    file: "auth.ts, lib/services/demo.service.ts, lib/services/personal-seed.service.ts"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Fixed ReferenceError (credentials param name) found in smoke test; now verified working by main agent. Enterprise demo (no product param) must remain unchanged."
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ ALL 3 TESTS PASSED
+          1. ✅ CSRF → POST /api/auth/callback/demo with product=personal → 302 without error, session shows workspaceKind='personal', isDemo=true
+          2. ✅ GET /api/personal/transactions → 66 transactions, currency INR, sum=650000 (exact), all categories from personal taxonomy (Income, Housing, Groceries, Utilities, Transportation, Dining, Subscriptions, Health, Insurance, Debt, Entertainment, Shopping, Investments, Other), 65 vendors with "(Demo" markers
+          3. ✅ GET /personal → 200 HTML with 'personal-dashboard' testid and '7.9' resilience months
+  - task: "POST/GET /api/personal/onboarding — profile save + deterministic seed (idempotent workspace, seed only when 0 txs)"
+    implemented: true
+    working: true
+    file: "app/api/personal/onboarding/route.ts"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Profile save + deterministic seed, idempotent workspace creation"
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ ALL 6 TESTS PASSED
+          4. ✅ Register fresh user (p2-ntrnecbr@nexusai.com), login via NextAuth credentials callback
+          5. ✅ POST /api/personal/onboarding unauth → 401, invalid body (negative number) → 400, missing field → 400
+          6. ✅ Valid onboarding → 200 {ok: true, workspaceId: <uuid>, seeded: 61}
+          7. ✅ GET /api/personal/onboarding → profile echoes all 9 values (monthlyIncome, essentialMonthly, discretionaryMonthly, cash, investments, totalDebt, monthlyDebtPayment, goal, currency), transaction count=61, sum=400000 (exact match with profile.cash)
+          8. ✅ Idempotency: POST again with cash=999999 → profile updates, seeded=0 (no re-seed), transaction count unchanged
+          9. ✅ Deterministic math: essential30d=60000, resilience=6.7 months (400000/60000)
+  - task: "GET/POST /api/personal/transactions — list + CSV import with PERSONAL taxonomy (LLM + heuristic fallback), dedupe"
+    implemented: true
+    working: true
+    file: "app/api/personal/transactions/route.ts"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "CSV import with personal taxonomy, LLM categorization + heuristic fallback, duplicate detection"
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ ALL 2 TESTS PASSED
+          10. ✅ POST /api/personal/transactions with CSV (Swiggy dinner, Uber ride, Netflix) → imported=3, all categorized correctly: Dining, Transportation, Subscriptions (all from personal taxonomy)
+          11. ✅ Re-upload same CSV → duplicates=3, imported=0 (duplicate detection working)
+  - task: "Deterministic personal calculations (state/health/resilience/what-changed) via shared core"
+    implemented: true
+    working: true
+    file: "lib/core/finance/personal.ts, lib/services/personal.service.ts"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Pure deterministic calculations via shared core, no LLM math"
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED via onboarding tests
+          - Resilience calculation: 6.7 months (400000 / 60000) displayed correctly on dashboard
+          - Essential spending: 60000 (from profile)
+          - All calculations deterministic and reproducible
+  - task: "P2 analytics events whitelist additions (personal_*) — no financial values in meta"
+    implemented: true
+    working: true
+    file: "lib/analytics/events.ts"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Added personal_demo_started, personal_onboarding_completed, personal_dashboard_viewed, personal_health_viewed, personal_resilience_viewed, personal_transaction_imported to ALLOWED_EVENTS"
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED by code review
+          12. ✅ lib/analytics/events.ts has ALLOWED_EVENTS including 'personal_demo_started' and 'personal_onboarding_completed'
+          - sanitizeMeta() only allows whitelisted keys: status, feature, reason, errorId, durationSec, first
+          - No financial values (amounts, income, goal) can be stored in meta
+          - Privacy safeguards in place
+  - task: "ENTERPRISE REGRESSION after P2 (demo, briefing, chat SSE, CSV, invoices, report, billing, tenant isolation) — must be unchanged"
+    implemented: true
+
+  - agent: "testing"
+    message: |
+      ✅ SPRINT P2 VERIFICATION COMPLETE - ALL 18 TESTS PASSED (100%)
+      
+      **COMPREHENSIVE BACKEND TESTING PERFORMED:**
+      Base URL: https://financial-health-hub-17.preview.emergentagent.com
+      Test Script: /app/backend_test_p2.py
+      Test Output: /app/test_output_p2.txt, /app/test_summary_p2.txt
+      
+      **PART 1: PERSONAL DEMO MODE (3/3 PASSED)**
+      1. ✅ Personal demo session creation - workspaceKind='personal', isDemo=true
+      2. ✅ Personal transactions - 66 txs, INR, sum=650000, all categories from personal taxonomy
+      3. ✅ Personal dashboard - contains 'personal-dashboard' testid and '7.9' resilience months
+      
+      **PART 2: PERSONAL ONBOARDING (6/6 PASSED)**
+      4. ✅ Register and login - user created and authenticated
+      5. ✅ Auth and validation - unauth→401, invalid→400, missing field→400
+      6. ✅ Valid onboarding - 200 {ok, workspaceId, seeded:61}
+      7. ✅ Profile echo - all 9 fields match, txs sum=400000 (exact)
+      8. ✅ Idempotency - second POST updates profile, seeded=0 (no re-seed)
+      9. ✅ Deterministic math - resilience=6.7 months (400000/60000)
+      
+      **PART 3: PERSONAL CSV IMPORT (2/2 PASSED)**
+      10. ✅ CSV import - 3 rows imported, categorized correctly (Dining, Transportation, Subscriptions)
+      11. ✅ Duplicate detection - re-upload→duplicates=3, imported=0
+      
+      **PART 4: PRIVACY & ANALYTICS (1/1 PASSED)**
+      12. ✅ Analytics privacy - code review verified whitelist and sanitization
+      
+      **PART 5: ENTERPRISE REGRESSION (6/6 PASSED)**
+      13. ✅ Enterprise demo - workspaceKind='business', 260 txs, business categories only
+      14. ✅ CFO briefing - all keys present, no null/NaN
+      15. ✅ CFO chat stream - SSE with 'done' event
+      16. ✅ Enterprise CSV - Figma→'SaaS' (business category)
+      17. ✅ Other endpoints - invoice, report, billing, memory all working
+      18. ✅ Tenant isolation - personal user blocked from enterprise data
+      
+      **KEY VALIDATIONS:**
+      ✅ Personal Demo Mode creates kind='personal' workspace with INR currency
+      ✅ Personal Onboarding with deterministic seeding (sum=cash exactly)
+      ✅ Personal CSV Import uses personal taxonomy (NOT business categories)
+      ✅ Privacy safeguards prevent financial data in analytics meta
+      ✅ Enterprise features 100% unchanged (no regressions)
+      
+      **PRODUCTION READINESS: ✅ APPROVED**
+      Sprint P2 is production-ready. All 18 acceptance criteria met. No blocking issues found.
+      
+      **Test Evidence:**
+      - Personal demo: 66 transactions, sum=650000, resilience=7.9 months
+      - Personal onboarding: profile saved, 61 transactions seeded, sum=400000
+      - CSV import: LLM categorization working (Dining, Transportation, Subscriptions)
+      - Enterprise regression: All CFO endpoints working, business categories preserved
+      - Tenant isolation: Personal and business workspaces properly separated
+
+    working: true
+    file: "no enterprise files changed except additive auth demo branch"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Enterprise behavior must remain functionally identical after P2 changes"
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ ALL 6 TESTS PASSED (100% REGRESSION PASS)
+          13. ✅ Enterprise demo (no product param) → workspaceKind='business', 260 transactions, categories: Infrastructure, Marketing, Office, Payment fees, Payroll, Professional Services, Revenue, SaaS, Travel & Meals (NO personal-only categories)
+          14. ✅ GET /api/cfo/briefing → 200, all required keys present (kpis, health, forecast, recs), no null/NaN values
+          15. ✅ CFO chat stream "What is my runway?" → 200 text/event-stream, events: meta, tool_start, tool_done, answer_start, token, ..., done
+          16. ✅ Enterprise CSV import (Figma subscription) → categorized as 'SaaS' (business category, NOT personal taxonomy)
+          17. ✅ Invoice upload (400 for .txt), report generation (200 with markdown), billing subscription (200), memory (200) - all working
+          18. ✅ Tenant isolation: personal user cannot access enterprise briefing (400), personal user can access personal transactions (200)
+          
+          **ENTERPRISE FEATURES UNCHANGED - NO REGRESSIONS DETECTED**
+
+frontend:
+  - task: "Personal dashboard /personal (health, resilience, surplus, what changed, money goes, position, CTAs)"
+    implemented: true
+    working: "NA"
+    file: "app/(personal)/personal/page.tsx, components/personal/*"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+  - task: "Personal onboarding /personal/onboarding + transactions page + placeholders (ask, scenario)"
+    implemented: true
+    working: "NA"
+    file: "app/(personal)/personal/{onboarding,transactions,ask,scenario}/page.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+  - task: "Landing product chooser (For your business / For you) + register?product=personal redirect"
+    implemented: true
+    working: "NA"
+    file: "app/page.tsx, app/(auth)/register/page.tsx, components/personal/PersonalDemoButton.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+
+metadata:
+  created_by: "main_agent"
+  version: "8.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Personal Demo Mode"
+    - "Personal onboarding API"
+    - "Personal transactions CSV"
+    - "Deterministic personal calculations"
+    - "ENTERPRISE REGRESSION after P2"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: |
+      P2 implemented. PRODUCTION BUILD ONLY (already rebuilt + restarted). Do NOT deploy.
+      Founder creds in /app/memory/test_credentials.md. Demo rate limit 10/15min/IP — reuse sessions.
+      Expected demo-profile figures: income 200000, spend 132000, surplus 68000, essential 82000,
+      resilience 7.9 months, cash 650000, currency INR.
+
+# ====================================================================
+# Sprint P3 — Forecast + Proactive Financial Alerts
+# ====================================================================
+
+  # P3 BACKEND TASKS
+  - task: "P3 - Personal forecast API (GET /api/personal/forecast)"
+    implemented: true
+    working: true
+    file: "app/api/personal/forecast/route.ts"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented 90-day forecast using shared forecastCash() engine. Returns series, drivers, explanation, resilience."
+      - working: true
+        agent: "testing"
+        comment: "✅ ALL TESTS PASSED. Unauthenticated request correctly returns 401. Authenticated request returns 200 with complete structure: forecast (90-day series with day/cash, startingCash, endingCash, lowestDay, narrative), currency (INR), resilience (7.9 months), drivers (12 items), explanation (156 chars). Analytics event 'personal_forecast_viewed' tracked correctly with no financial values in metadata (privacy-safe)."
+
+  - task: "P3 - Personal alerts API (GET /api/personal/alerts)"
+    implemented: true
+    working: true
+    file: "app/api/personal/alerts/route.ts"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented deterministic alert engine. Returns alerts sorted by severity with summary counts."
+      - working: true
+        agent: "testing"
+        comment: "✅ ALL TESTS PASSED. Unauthenticated request correctly returns 401. Authenticated request returns 200 with complete structure: alerts array (1 alert with id, type, severity, title, explanation, metric, context, recommendation, timestamp), currency (INR), summary (critical: 0, warning: 0, info: 1, total: 1). Demo profile is healthy as expected (0 critical, 0 warning). Analytics event 'personal_alerts_viewed' tracked correctly with no financial values in metadata (privacy-safe)."
+
+  - task: "P3 - Deterministic alert engine (lib/core/finance/alerts.ts)"
+    implemented: true
+    working: true
+    file: "lib/core/finance/alerts.ts"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "17/17 unit tests pass. Alert types: LOW_RESILIENCE, PROJECTED_CASH_DECLINE, PROJECTED_CASH_LOW, SPENDING_INCREASE, CATEGORY_OVERSPEND, LARGE_ANOMALY, UPCOMING_MAJOR_EXPENSE, SAVINGS_IMPROVED. Thresholds documented."
+
+  - task: "P3 - Personal dashboard alerts section ('Needs your attention', max 3)"
+    implemented: true
+    working: "NA"
+    file: "app/(personal)/personal/page.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Dashboard shows top 3 alerts with severity icons, links to /personal/alerts. Visual smoke test passed."
+
+  - task: "P3 - Forecast page (/personal/forecast)"
+    implemented: true
+    working: "NA"
+    file: "app/(personal)/personal/forecast/page.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "90-day chart with recharts, 4 metric cards, driver list, deterministic explanation. Visual smoke test passed."
+
+  - task: "P3 - Alerts page (/personal/alerts)"
+    implemented: true
+    working: "NA"
+    file: "app/(personal)/personal/alerts/page.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Alerts organized by Critical/Warning/Info. Expandable detail view with explanation + recommendation."
+
+  - task: "P3 - What Changed improvement (P3.9)"
+    implemented: true
+    working: true
+    file: "lib/core/finance/personal.ts"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Added savings_rate_change to what-changed feed. Unit tested. P2 tests still pass 8/8."
+
+  - task: "P3 - Analytics events (personal_forecast_viewed, personal_alerts_viewed, etc.)"
+    implemented: true
+    working: true
+    file: "lib/analytics/events.ts"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "4 new events added to whitelist. No financial values in metadata."
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED. All 4 P3 events in whitelist: personal_forecast_viewed, personal_alerts_viewed, personal_alert_opened, personal_forecast_interaction. Events tracked correctly in MongoDB with no financial values in metadata (privacy-safe). Both forecast and alerts events successfully recorded during testing."
+
+  - task: "P3 - Enterprise regression"
+    implemented: true
+    working: true
+    file: "tests/core/finance.core.test.ts"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "16/16 enterprise core tests pass. forecastCash() signature unchanged. No CFO routes modified."
+      - working: true
+        agent: "testing"
+        comment: "✅ REGRESSION TEST PASSED. GET /api/cfo/briefing returns 200 with all required keys (briefing, kpis, health, forecast). Forecast structure intact with series, startingCash, endingCash. No breaking changes to enterprise CFO functionality. P3 changes are isolated to personal product."
+
+  - task: "P3 - P2 regression"
+    implemented: true
+    working: true
+    file: "tests/core/personal.core.test.ts"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "8/8 personal core tests pass. Dashboard, health, resilience, what-changed all intact."
+
+  - agent: "main"
+    message: |
+      Sprint P3 implemented. PRODUCTION BUILD DONE (next build + restart).
+      
+      KEY TEST FLOWS:
+      1. Demo → Personal dashboard → "Needs your attention" section shows alerts
+      2. Demo → /personal/forecast → 90-day chart, metrics, drivers, explanation
+      3. Demo → /personal/alerts → severity-organized alert list
+      4. Enterprise CFO routes MUST still work unchanged
+      
+      DEMO PROFILE: healthy (95/100, 7.9mo resilience), so expect mostly INFO alerts.
+      For the demo, there's 1 informational alert (upcoming rent expense ₹41,820).
+      
+      UNIT TESTS: 17/17 P3 pass, 8/8 P2 pass, 16/16 enterprise pass (41 total).
+      
+      Test creds in /app/memory/test_credentials.md.
+      Demo rate limit 10/15min/IP — reuse sessions.
+
+  - agent: "testing"
+    message: |
+      ✅ SPRINT P3 BACKEND TESTING COMPLETE - ALL 9 TESTS PASSED (100%)
+      
+      **BACKEND API TESTS:**
+      1. ✅ GET /api/personal/forecast (unauthenticated) → 401 Unauthorized
+      2. ✅ GET /api/personal/alerts (unauthenticated) → 401 Unauthorized
+      3. ✅ Demo session creation for personal product → workspaceKind='personal'
+      4. ✅ GET /api/personal/forecast (authenticated) → 200 with complete structure:
+         - forecast: 90-day series (day, cash), startingCash, endingCash, lowestDay, narrative
+         - currency: INR
+         - resilience: 7.9 months
+         - drivers: 12 items
+         - explanation: 156 chars
+      5. ✅ GET /api/personal/alerts (authenticated) → 200 with complete structure:
+         - alerts: 1 alert (healthy profile: 0 critical, 0 warning, 1 info)
+         - currency: INR
+         - summary: critical=0, warning=0, info=1, total=1
+      6. ✅ Analytics event 'personal_forecast_viewed' tracked in MongoDB (no financial data)
+      7. ✅ Analytics event 'personal_alerts_viewed' tracked in MongoDB (no financial data)
+      8. ✅ Analytics whitelist includes all 4 P3 events
+      9. ✅ Enterprise regression: GET /api/cfo/briefing still works (200, all keys present)
+      
+      **PRIVACY VERIFICATION:**
+      - ✅ No financial values in analytics metadata (privacy-safe)
+      - ✅ Events tracked correctly without exposing sensitive data
+      
+      **ENTERPRISE ISOLATION:**
+      - ✅ CFO briefing endpoint unchanged and working
+      - ✅ No breaking changes to enterprise functionality
+      
+      **TEST FILE:** /app/backend_test_p3.py
+      
+      **VERDICT:** All P3 backend APIs are production-ready. No critical issues found.
+

@@ -38,8 +38,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const ip = getClientIp(request as unknown as Request);
         const rl = rateLimit(`demo:${ip}`, 10, 15 * 60_000); // 10 demo workspaces / 15min / IP
         if (!rl.allowed) throw new Error('Too many demo workspaces created — please try again later.');
-        const demoUser = await demoService.createDemoWorkspace();
-        trackServer('demo_started', { userId: demoUser.id, isDemo: true });
+        const isPersonal = (_credentials as any)?.product === 'personal';
+        const demoUser = isPersonal
+          ? await demoService.createPersonalDemoWorkspace()
+          : await demoService.createDemoWorkspace();
+        trackServer(isPersonal ? 'personal_demo_started' : 'demo_started', { userId: demoUser.id, isDemo: true });
         return { id: demoUser.id, email: demoUser.email, name: demoUser.name, isDemo: true } as any;
       },
     }),

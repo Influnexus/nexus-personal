@@ -10,7 +10,7 @@ import io
 from datetime import datetime
 
 # Base URL from .env
-BASE_URL = "https://nexus-enterprise-ai-2.preview.emergentagent.com"
+BASE_URL = "https://financial-health-hub-17.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 
 def log(msg):
