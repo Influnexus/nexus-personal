@@ -28,6 +28,9 @@ export const ALLOWED_EVENTS = [
   // Nexus Personal (Sprint P4) — scenarios, no financial values
   'personal_scenario_started', 'personal_scenario_completed',
   'personal_scenario_type', 'personal_scenario_alternative_selected',
+  // Nexus Personal (Sprint P5) — chat, no financial values or message text
+  'personal_chat_started', 'personal_chat_question', 'personal_chat_scenario',
+  'personal_chat_tool_used', 'personal_chat_completed',
   // Engagement / meta
   'session_heartbeat', 'feedback_submitted', 'problem_reported',
 ] as const;

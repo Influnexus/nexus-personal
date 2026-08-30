@@ -5086,3 +5086,63 @@ agent_communication:
       9. ✅ P3 regression - GET /api/personal/alerts (structure correct)
       
       NO CRITICAL ISSUES FOUND. All backend APIs working correctly.
+
+# Sprint P5 — Ask Nexus Personal
+  - task: "P5 - Personal AI chat API (POST /api/personal/chat)"
+    implemented: true
+    working: "NA"
+    file: "app/api/personal/chat/route.ts"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+
+  - task: "P5 - Personal tool registry (lib/ai/personal-tools.ts)"
+    implemented: true
+    working: "NA"
+    file: "lib/ai/personal-tools.ts"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+
+  - task: "P5 - Personal AI agent (lib/ai/personal-agent.ts)"
+    implemented: true
+    working: "NA"
+    file: "lib/ai/personal-agent.ts"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+
+  - task: "P5 - Chat UI (/personal/chat)"
+    implemented: true
+    working: "NA"
+    file: "app/(personal)/personal/chat/page.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+
+  - task: "P5 - Enterprise regression"
+    implemented: true
+    working: true
+    file: "tests/core/"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+
+  - agent: "main"
+    message: |
+      Sprint P5 implemented. Ask Nexus Personal chat with 9 deterministic tools.
+      
+      KEY TEST FLOWS:
+      1. POST /api/personal/chat (SSE streaming) with { messages: [{ role: 'user', content: 'How am I doing?' }] }
+         → Streams tool calls + answer. Financial numbers should match dashboard values.
+      2. POST /api/personal/chat with scenario question: "Can I afford a 2 lakh laptop?"
+         → Should call evaluate_scenario tool, return deterministic verdict
+      3. Unauthenticated → 401
+      4. Enterprise CFO chat at /api/cfo/chat must still work
+      5. P1-P4 regression: all deterministic pages must still work
+      
+      DEMO: Use personal demo. Chat page at /personal/chat.
+      Expected tool-grounded numbers: Health 95/100, Resilience 7.9mo, Cash ₹6.5L, Surplus ₹63,800.
+      
+      64/64 unit tests pass (P1-P4). Build successful. 
+      Test creds in /app/memory/test_credentials.md. Demo rate limit 10/15min/IP.

@@ -24,8 +24,8 @@ export default async function PersonalLayout({ children }: { children: React.Rea
             <Link href="/personal" className="rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">Overview</Link>
             <Link href="/personal/forecast" className="rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">Forecast</Link>
             <Link href="/personal/scenarios" className="rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">Scenarios</Link>
+            <Link href="/personal/chat" className="rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">Ask Nexus</Link>
             <Link href="/personal/alerts" className="rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">Alerts</Link>
-            <Link href="/personal/transactions" className="rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">Transactions</Link>
           </nav>
           <div className="ml-auto flex items-center gap-2">
             {isDemo && <Badge variant="secondary" className="text-[10px]" data-testid="personal-demo-pill">Demo — fictional data</Badge>}

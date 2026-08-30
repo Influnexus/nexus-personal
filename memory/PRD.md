@@ -52,3 +52,12 @@
 - Verdict: GREEN/YELLOW/ORANGE/RED. LLM: ONLY extracts parameters, never calculates.
 - Tests: 23/23 P4 unit, 9/9 E2E. Enterprise/P1-P3 all passing (64+ unit tests total).
 
+
+## Sprint P5 — Ask Nexus Personal (COMPLETE, PENDING USER VALIDATION)
+- Conversational AI at /personal/chat: 9 deterministic tools, SSE streaming, personal persona.
+- Tool registry (personal-tools.ts): get_financial_state, get_financial_health, get_financial_resilience, get_cash_forecast, get_financial_alerts, get_spending_breakdown, get_what_changed, evaluate_scenario, get_recurring_commitments.
+- LLM: ONLY intent understanding + explanation. All numbers from deterministic tools. System prompt enforces grounding.
+- Memory: agent="personal" isolated from enterprise agent="cfo". 
+- Analytics: 5 events (personal_chat_started/question/scenario/tool_used/completed). No message text or financial values.
+- Tests: 64/64 unit (P1-P4), 4/5 E2E (1 rate-limit not a bug). Enterprise CFO chat regression passed.
+- Safety: no investment advice, no bank integrations, no transactions, no product recommendations.

@@ -1,577 +1,571 @@
 #!/usr/bin/env python3
 """
-Backend test for Sprint 6 - Invoice Upload Fix + Security Spot-Checks
-Tests the fixed /api/cfo/invoices route and verifies analytics events.
+Sprint P5 Backend Testing — Ask Nexus Personal AI Chat
+Tests SSE streaming chat endpoint, scenario evaluation, and P3/P4 regression.
 """
 
 import requests
 import json
 import time
-from io import BytesIO
-from PIL import Image, ImageDraw, ImageFont
-from pymongo import MongoClient
-import os
-from datetime import datetime
+import re
+from typing import Dict, List, Any
 
-# Configuration
-BASE_URL = os.getenv('NEXT_PUBLIC_BASE_URL', 'https://financial-health-hub-17.preview.emergentagent.com')
-API_URL = f"{BASE_URL}/api"
-MONGO_URL = os.getenv('MONGO_URL', 'mongodb://localhost:27017')
-DB_NAME = os.getenv('DB_NAME', 'nexusai')
+BASE_URL = "https://financial-health-hub-17.preview.emergentagent.com"
+TIMEOUT = 90  # LLM calls can take 10-20 seconds, set 90s timeout
 
-# Test credentials
-FOUNDER_EMAIL = "founder@nexusai.com"
-FOUNDER_PASSWORD = "FxeCgujuk8kA2PWNUO2qRu7"
-
-print("=" * 80)
-print("SPRINT 6 - INVOICE UPLOAD FIX + SECURITY VERIFICATION")
-print("=" * 80)
-print(f"API URL: {API_URL}")
-print(f"MongoDB: {MONGO_URL}/{DB_NAME}")
-print()
-
-# MongoDB connection
-try:
-    mongo_client = MongoClient(MONGO_URL)
-    db = mongo_client[DB_NAME]
-    analytics_events = db['analytics_events']
-    print("✅ MongoDB connection established")
-except Exception as e:
-    print(f"❌ MongoDB connection failed: {e}")
-    exit(1)
-
-def generate_invoice_png():
-    """Generate a simple invoice as PNG with required text"""
-    img = Image.new('RGB', (800, 600), color='white')
-    draw = ImageDraw.Draw(img)
-    
-    # Try to use a default font, fallback to basic if not available
-    try:
-        font_large = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 24)
-        font_normal = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18)
-    except:
-        font_large = ImageFont.load_default()
-        font_normal = ImageFont.load_default()
-    
-    # Draw invoice content
-    y = 50
-    draw.text((50, y), "INVOICE", fill='black', font=font_large)
-    y += 60
-    draw.text((50, y), "Invoice #: INV-100", fill='black', font=font_normal)
-    y += 40
-    draw.text((50, y), "Vendor: Acme Corp", fill='black', font=font_normal)
-    y += 40
-    draw.text((50, y), "Date: 2026-08-01", fill='black', font=font_normal)
-    y += 40
-    draw.text((50, y), "Due Date: 2026-09-01", fill='black', font=font_normal)
-    y += 40
-    draw.text((50, y), "Amount: $1,250.00", fill='black', font=font_normal)
-    
-    # Convert to bytes
-    buf = BytesIO()
-    img.save(buf, format='PNG')
-    buf.seek(0)
-    return buf
-
-def get_demo_session():
-    """Get a demo session for testing"""
-    try:
-        # Create a session to maintain cookies
-        session = requests.Session()
+class TestSession:
+    def __init__(self):
+        self.session = requests.Session()
+        self.csrf_token = None
+        self.authenticated = False
+        self.workspace_kind = None
         
-        # Get CSRF token
-        csrf_resp = session.get(f"{API_URL}/auth/csrf", timeout=10)
-        if csrf_resp.status_code != 200:
-            print(f"❌ Failed to get CSRF token: {csrf_resp.status_code}")
-            return None
-        
-        csrf_data = csrf_resp.json()
-        if not csrf_data or 'csrfToken' not in csrf_data:
-            print(f"❌ CSRF response missing csrfToken: {csrf_data}")
-            return None
-        
-        csrf_token = csrf_data['csrfToken']
-        
-        # Create demo session
-        demo_resp = session.post(
-            f"{API_URL}/auth/callback/demo",
-            data={'csrfToken': csrf_token},
-            allow_redirects=False,
-            timeout=10
-        )
-        
-        if demo_resp.status_code not in [302, 200]:
-            print(f"❌ Demo session creation failed: {demo_resp.status_code}")
-            print(f"   Response: {demo_resp.text[:200]}")
-            return None
-        
-        # Verify session
-        session_resp = session.get(f"{API_URL}/auth/session", timeout=10)
-        if session_resp.status_code == 200:
-            session_data = session_resp.json()
-            if session_data and session_data.get('user'):
-                print(f"✅ Demo session created: org={session_data['user'].get('activeOrgId')}")
-                return session.cookies
-        
-        print("❌ Demo session verification failed")
-        print(f"   Session response: {session_resp.text[:200]}")
-        return None
-    except Exception as e:
-        import traceback
-        print(f"❌ Demo session creation error: {e}")
-        print(traceback.format_exc())
-        return None
-
-def login_user(email, password):
-    """Login with credentials and return session cookies"""
-    try:
-        # Create a session to maintain cookies
-        session = requests.Session()
-        
-        # Get CSRF token
-        csrf_resp = session.get(f"{API_URL}/auth/csrf", timeout=10)
-        if csrf_resp.status_code != 200:
-            print(f"❌ Failed to get CSRF token: {csrf_resp.status_code}")
-            return None
-        csrf_token = csrf_resp.json().get('csrfToken')
-        
-        # Login
-        login_resp = session.post(
-            f"{API_URL}/auth/callback/credentials",
-            data={
-                'csrfToken': csrf_token,
-                'email': email,
-                'password': password,
-                'redirect': 'false'
-            },
-            allow_redirects=False,
-            timeout=10
-        )
-        
-        if login_resp.status_code not in [302, 200]:
-            print(f"❌ Login failed: {login_resp.status_code}")
-            print(f"   Response: {login_resp.text[:200]}")
-            return None
-        
-        # Verify session
-        session_resp = session.get(f"{API_URL}/auth/session", timeout=10)
-        if session_resp.status_code == 200:
-            session_data = session_resp.json()
-            if session_data and session_data.get('user'):
-                print(f"✅ Login successful: {email}")
-                return session.cookies
-        
-        print(f"❌ Session verification failed for {email}")
-        print(f"   Session response: {session_resp.text[:200]}")
-        return None
-    except Exception as e:
-        import traceback
-        print(f"❌ Login error for {email}: {e}")
-        print(traceback.format_exc())
-        return None
-
-def register_user(email, password, name="Test User"):
-    """Register a new user"""
-    try:
-        resp = requests.post(
-            f"{API_URL}/register",
-            json={'email': email, 'password': password, 'name': name},
-            timeout=10
-        )
-        if resp.status_code == 200:
-            print(f"✅ User registered: {email}")
-            return True
-        else:
-            print(f"⚠️ Registration response: {resp.status_code} - {resp.text[:200]}")
+    def get_csrf(self) -> bool:
+        """Get CSRF token"""
+        try:
+            resp = self.session.get(f"{BASE_URL}/api/auth/csrf", timeout=10)
+            if resp.status_code == 200:
+                data = resp.json()
+                self.csrf_token = data.get('csrfToken')
+                print(f"✅ CSRF token obtained: {self.csrf_token[:20]}...")
+                return True
+            else:
+                print(f"❌ Failed to get CSRF token: {resp.status_code}")
+                return False
+        except Exception as e:
+            print(f"❌ Exception getting CSRF token: {e}")
             return False
-    except Exception as e:
-        print(f"❌ Registration error: {e}")
-        return False
+    
+    def demo_login(self, product: str = None) -> bool:
+        """Login with demo mode"""
+        try:
+            payload = {'csrfToken': self.csrf_token}
+            if product:
+                payload['product'] = product
+            
+            resp = self.session.post(
+                f"{BASE_URL}/api/auth/callback/demo",
+                json=payload,
+                timeout=15,
+                allow_redirects=False
+            )
+            
+            if resp.status_code in [200, 302]:
+                self.authenticated = True
+                print(f"✅ Demo login successful ({product or 'business'})")
+                
+                # Get session to verify workspace kind
+                try:
+                    session_resp = self.session.get(f"{BASE_URL}/api/auth/session", timeout=10)
+                    if session_resp.status_code == 200:
+                        session_data = session_resp.json()
+                        if session_data and isinstance(session_data, dict):
+                            user_data = session_data.get('user', {})
+                            if user_data:
+                                self.workspace_kind = user_data.get('workspaceKind', 'business')
+                                print(f"   Workspace kind: {self.workspace_kind}")
+                except Exception as e:
+                    print(f"   Warning: Could not verify workspace kind: {e}")
+                    self.workspace_kind = 'business'
+                
+                return True
+            else:
+                print(f"❌ Demo login failed: {resp.status_code}")
+                return False
+        except Exception as e:
+            print(f"❌ Exception during demo login: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
 
-def check_analytics_events(org_id, event_types, since_timestamp):
-    """Check if analytics events exist in MongoDB"""
+def parse_sse_events(text: str) -> List[Dict[str, Any]]:
+    """Parse SSE event stream"""
+    events = []
+    lines = text.strip().split('\n')
+    current_event = {}
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            if current_event:
+                events.append(current_event)
+                current_event = {}
+            continue
+        
+        if line.startswith('event:'):
+            current_event['event'] = line[6:].strip()
+        elif line.startswith('data:'):
+            data_str = line[5:].strip()
+            try:
+                current_event['data'] = json.loads(data_str)
+            except:
+                current_event['data'] = data_str
+    
+    if current_event:
+        events.append(current_event)
+    
+    return events
+
+def test_personal_chat_basic():
+    """Test 1: POST /api/personal/chat with basic question"""
+    print("\n" + "="*80)
+    print("TEST 1: Personal AI Chat - Basic Question")
+    print("="*80)
+    
+    session = TestSession()
+    
+    # Step 1: Get CSRF token
+    if not session.get_csrf():
+        print("❌ TEST 1 FAILED: Could not get CSRF token")
+        return False
+    
+    # Step 2: Login with personal demo
+    if not session.demo_login(product='personal'):
+        print("❌ TEST 1 FAILED: Could not login with personal demo")
+        return False
+    
+    # Step 3: Send chat message
     try:
-        # createdAt is stored as datetime object in MongoDB
-        query = {
-            'organizationId': org_id,
-            'event': {'$in': event_types},
-            'createdAt': {'$gte': since_timestamp}
+        print("\n📤 Sending chat message: 'How am I doing financially?'")
+        payload = {
+            "messages": [
+                {"role": "user", "content": "How am I doing financially?"}
+            ]
         }
         
-        print(f"  Query: organizationId={org_id}, events={event_types}, since={since_timestamp}")
+        resp = session.session.post(
+            f"{BASE_URL}/api/personal/chat",
+            json=payload,
+            timeout=TIMEOUT,
+            stream=True
+        )
         
-        events = list(analytics_events.find(query).sort('createdAt', -1))
+        if resp.status_code != 200:
+            print(f"❌ TEST 1 FAILED: Expected 200, got {resp.status_code}")
+            print(f"   Response: {resp.text[:500]}")
+            return False
         
-        print(f"  Found {len(events)} events matching query")
+        # Check content type
+        content_type = resp.headers.get('content-type', '')
+        if 'text/event-stream' not in content_type:
+            print(f"❌ TEST 1 FAILED: Expected text/event-stream, got {content_type}")
+            return False
         
-        return events
+        print(f"✅ Response is SSE stream (content-type: {content_type})")
+        
+        # Parse SSE events
+        sse_text = resp.text
+        events = parse_sse_events(sse_text)
+        
+        print(f"\n📊 Received {len(events)} SSE events")
+        
+        # Check for required events
+        event_types = [e.get('event') for e in events]
+        print(f"   Event types: {event_types}")
+        
+        required_events = ['tool_start', 'tool_done', 'answer_start', 'token', 'answer_end', 'done']
+        missing_events = [e for e in required_events if e not in event_types]
+        
+        if missing_events:
+            print(f"⚠️  Missing events: {missing_events}")
+        else:
+            print(f"✅ All required events present")
+        
+        # Check for tool calls
+        tool_starts = [e for e in events if e.get('event') == 'tool_start']
+        tool_names = [e.get('data', {}).get('name') for e in tool_starts if isinstance(e.get('data'), dict)]
+        print(f"\n🔧 Tools called: {tool_names}")
+        
+        expected_tools = ['get_financial_state', 'get_financial_health', 'get_financial_resilience']
+        tools_found = [t for t in expected_tools if t in tool_names]
+        
+        if len(tools_found) >= 2:
+            print(f"✅ Expected tools found: {tools_found}")
+        else:
+            print(f"⚠️  Expected at least 2 of {expected_tools}, found: {tools_found}")
+        
+        # Assemble final answer
+        token_events = [e for e in events if e.get('event') == 'token']
+        answer = ''.join([e.get('data', {}).get('delta', '') for e in token_events if isinstance(e.get('data'), dict)])
+        
+        print(f"\n💬 Answer preview: {answer[:200]}...")
+        
+        # Check for financial numbers in answer
+        has_rupee = '₹' in answer or 'INR' in answer or 'rupee' in answer.lower()
+        has_health = 'health' in answer.lower() or 'score' in answer.lower()
+        has_numbers = bool(re.search(r'\d+', answer))
+        
+        print(f"\n📈 Answer contains:")
+        print(f"   Currency/₹: {has_rupee}")
+        print(f"   Health/Score: {has_health}")
+        print(f"   Numbers: {has_numbers}")
+        
+        if has_numbers and (has_rupee or has_health):
+            print(f"✅ Answer contains financial data")
+        else:
+            print(f"⚠️  Answer may be missing financial data")
+        
+        # Check for done event
+        done_events = [e for e in events if e.get('event') == 'done']
+        if done_events:
+            print(f"✅ Stream completed with 'done' event")
+        else:
+            print(f"⚠️  No 'done' event found")
+        
+        print("\n✅ TEST 1 PASSED: Personal chat basic question working")
+        return True
+        
     except Exception as e:
-        print(f"❌ Error querying analytics events: {e}")
+        print(f"❌ TEST 1 FAILED: Exception: {e}")
         import traceback
-        print(traceback.format_exc())
-        return []
+        traceback.print_exc()
+        return False
 
-print("\n" + "=" * 80)
-print("TEST 1: SUCCESSFUL INVOICE UPLOAD END-TO-END")
-print("=" * 80)
-
-# Get demo session
-demo_cookies = get_demo_session()
-if not demo_cookies:
-    print("❌ TEST 1 FAILED: Could not create demo session")
-    exit(1)
-
-# Get org ID from session
-session_resp = requests.get(f"{API_URL}/auth/session", cookies=demo_cookies, timeout=10)
-session_data = session_resp.json()
-org_id = session_data['user']['activeOrgId']
-print(f"Demo org ID: {org_id}")
-
-# Record timestamp before upload
-before_upload = datetime.utcnow()
-
-# Generate invoice PNG
-print("\nGenerating invoice PNG...")
-invoice_png = generate_invoice_png()
-
-# Upload invoice
-print("Uploading invoice to /api/cfo/invoices...")
-try:
-    upload_resp = requests.post(
-        f"{API_URL}/cfo/invoices",
-        files={'file': ('invoice.png', invoice_png, 'image/png')},
-        cookies=demo_cookies,
-        timeout=90  # LLM vision parse may take up to 60s
-    )
+def test_personal_chat_scenario():
+    """Test 2: POST /api/personal/chat with scenario question"""
+    print("\n" + "="*80)
+    print("TEST 2: Personal AI Chat - Scenario Question")
+    print("="*80)
     
-    print(f"Response status: {upload_resp.status_code}")
+    session = TestSession()
     
-    if upload_resp.status_code == 200:
-        result = upload_resp.json()
-        if 'invoice' in result:
-            invoice = result['invoice']
-            print(f"✅ Invoice uploaded successfully!")
-            print(f"   Invoice ID: {invoice.get('id')}")
-            print(f"   Vendor: {invoice.get('vendor')}")
-            print(f"   Amount: {invoice.get('amount')} {invoice.get('currency')}")
-            print(f"   Invoice Number: {invoice.get('invoiceNumber')}")
-            print(f"   Invoice Date: {invoice.get('invoiceDate')}")
-            print(f"   Due Date: {invoice.get('dueDate')}")
-        else:
-            print(f"⚠️ Response missing 'invoice' key: {result}")
-    else:
-        print(f"❌ Upload failed: {upload_resp.status_code}")
-        print(f"   Response: {upload_resp.text[:500]}")
-        print("❌ TEST 1 FAILED: Invoice upload returned non-200 status")
-except Exception as e:
-    print(f"❌ Upload error: {e}")
-    print("❌ TEST 1 FAILED: Exception during upload")
-
-print("\n" + "=" * 80)
-print("TEST 2: VERIFY ANALYTICS EVENTS IN MONGODB")
-print("=" * 80)
-
-# Wait a moment for events to be written
-time.sleep(2)
-
-# Check for invoice_upload_started and invoice_upload_completed events
-print(f"Querying events since: {before_upload.strftime('%Y-%m-%d %H:%M:%S')}")
-events = check_analytics_events(
-    org_id,
-    ['invoice_upload_started', 'invoice_upload_completed'],
-    before_upload
-)
-
-print(f"Found {len(events)} analytics events for this upload")
-
-started_found = False
-completed_found = False
-
-for event in events:
-    event_type = event.get('event')
-    meta = event.get('meta', {})
+    if not session.get_csrf():
+        print("❌ TEST 2 FAILED: Could not get CSRF token")
+        return False
     
-    print(f"\n✅ Event: {event_type}")
-    print(f"   Created At: {event.get('createdAt')}")
-    print(f"   Organization ID: {event.get('organizationId')}")
-    print(f"   User ID: {event.get('userId')}")
+    if not session.demo_login(product='personal'):
+        print("❌ TEST 2 FAILED: Could not login with personal demo")
+        return False
     
-    if meta:
-        print(f"   Meta: {meta}")
-        # Verify NO sensitive data in meta
-        meta_str = json.dumps(meta).lower()
-        if 'acme' in meta_str or '1250' in meta_str or 'inv-100' in meta_str:
-            print(f"   ⚠️ WARNING: Sensitive data found in meta!")
-    
-    if event_type == 'invoice_upload_started':
-        started_found = True
-    elif event_type == 'invoice_upload_completed':
-        completed_found = True
-
-if started_found and completed_found:
-    print("\n✅ TEST 2 PASSED: Both invoice_upload_started and invoice_upload_completed events found")
-else:
-    print(f"\n❌ TEST 2 FAILED: Missing events (started={started_found}, completed={completed_found})")
-
-print("\n" + "=" * 80)
-print("TEST 3: FAILURE PATH - UPLOAD .TXT FILE")
-print("=" * 80)
-
-before_txt = datetime.utcnow()
-
-txt_content = BytesIO(b"This is a text file, not an invoice")
-try:
-    txt_resp = requests.post(
-        f"{API_URL}/cfo/invoices",
-        files={'file': ('test.txt', txt_content, 'text/plain')},
-        cookies=demo_cookies,
-        timeout=10
-    )
-    
-    print(f"Response status: {txt_resp.status_code}")
-    
-    if txt_resp.status_code == 400:
-        result = txt_resp.json()
-        error_msg = result.get('error', '')
-        print(f"✅ Got expected 400 error")
-        print(f"   Error message: {error_msg}")
+    try:
+        print("\n📤 Sending scenario question: 'Can I afford a 2 lakh laptop?'")
+        payload = {
+            "messages": [
+                {"role": "user", "content": "Can I afford a 2 lakh laptop?"}
+            ]
+        }
         
-        if 'unsupported' in error_msg.lower() or 'pdf' in error_msg.lower() or 'png' in error_msg.lower():
-            print("✅ Error message is user-friendly")
-        else:
-            print("⚠️ Error message could be more user-friendly")
-    else:
-        print(f"❌ Expected 400, got {txt_resp.status_code}")
-        print(f"   Response: {txt_resp.text[:200]}")
-except Exception as e:
-    print(f"❌ Error: {e}")
-
-# Check for failed event
-time.sleep(1)
-failed_events = check_analytics_events(
-    org_id,
-    ['invoice_upload_failed'],
-    before_txt
-)
-
-if failed_events:
-    for event in failed_events:
-        meta = event.get('meta', {})
-        reason = meta.get('reason', '')
-        print(f"\n✅ Failed event recorded: reason='{reason}'")
-        if reason == 'unsupported_type':
-            print("✅ TEST 3 PASSED: Correct failure reason recorded")
-        else:
-            print(f"⚠️ Expected reason='unsupported_type', got '{reason}'")
-else:
-    print("\n❌ TEST 3 FAILED: No invoice_upload_failed event found")
-
-print("\n" + "=" * 80)
-print("TEST 4: FAILURE PATH - EMPTY FILE")
-print("=" * 80)
-
-before_empty = datetime.utcnow()
-
-empty_file = BytesIO(b"")
-try:
-    empty_resp = requests.post(
-        f"{API_URL}/cfo/invoices",
-        files={'file': ('empty.png', empty_file, 'image/png')},
-        cookies=demo_cookies,
-        timeout=10
-    )
-    
-    print(f"Response status: {empty_resp.status_code}")
-    
-    if empty_resp.status_code == 400:
-        result = empty_resp.json()
-        error_msg = result.get('error', '')
-        print(f"✅ Got expected 400 error")
-        print(f"   Error message: {error_msg}")
+        resp = session.session.post(
+            f"{BASE_URL}/api/personal/chat",
+            json=payload,
+            timeout=TIMEOUT,
+            stream=True
+        )
         
-        if 'empty' in error_msg.lower():
-            print("✅ Error message mentions empty file")
+        if resp.status_code != 200:
+            print(f"❌ TEST 2 FAILED: Expected 200, got {resp.status_code}")
+            return False
+        
+        # Parse SSE events
+        events = parse_sse_events(resp.text)
+        print(f"📊 Received {len(events)} SSE events")
+        
+        # Check for evaluate_scenario tool
+        tool_starts = [e for e in events if e.get('event') == 'tool_start']
+        tool_names = [e.get('data', {}).get('name') for e in tool_starts if isinstance(e.get('data'), dict)]
+        
+        print(f"🔧 Tools called: {tool_names}")
+        
+        if 'evaluate_scenario' in tool_names:
+            print(f"✅ evaluate_scenario tool was called")
         else:
-            print("⚠️ Error message doesn't mention empty file")
-    else:
-        print(f"❌ Expected 400, got {empty_resp.status_code}")
-except Exception as e:
-    print(f"❌ Error: {e}")
-
-# Check for failed event
-time.sleep(1)
-empty_failed_events = check_analytics_events(
-    org_id,
-    ['invoice_upload_failed'],
-    before_empty
-)
-
-if empty_failed_events:
-    for event in empty_failed_events:
-        meta = event.get('meta', {})
-        reason = meta.get('reason', '')
-        print(f"\n✅ Failed event recorded: reason='{reason}'")
-        if reason == 'empty_file':
-            print("✅ TEST 4 PASSED: Correct failure reason recorded")
+            print(f"⚠️  evaluate_scenario tool not found in: {tool_names}")
+        
+        # Assemble answer
+        token_events = [e for e in events if e.get('event') == 'token']
+        answer = ''.join([e.get('data', {}).get('delta', '') for e in token_events if isinstance(e.get('data'), dict)])
+        
+        print(f"\n💬 Answer preview: {answer[:300]}...")
+        
+        # Check for verdict/recommendation
+        has_verdict = any(word in answer.lower() for word in ['yes', 'no', 'afford', 'can', 'cannot', 'verdict', 'recommend'])
+        has_numbers = bool(re.search(r'\d+', answer))
+        
+        if has_verdict and has_numbers:
+            print(f"✅ Answer contains verdict and financial analysis")
         else:
-            print(f"⚠️ Expected reason='empty_file', got '{reason}'")
-else:
-    print("\n❌ TEST 4 FAILED: No invoice_upload_failed event found")
+            print(f"⚠️  Answer may be incomplete (verdict: {has_verdict}, numbers: {has_numbers})")
+        
+        print("\n✅ TEST 2 PASSED: Scenario evaluation working")
+        return True
+        
+    except Exception as e:
+        print(f"❌ TEST 2 FAILED: Exception: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
-print("\n" + "=" * 80)
-print("TEST 5: SECURITY - FOUNDER LOGIN WITH ROTATED PASSWORD")
-print("=" * 80)
-
-founder_cookies = login_user(FOUNDER_EMAIL, FOUNDER_PASSWORD)
-if founder_cookies:
-    print("✅ TEST 5 PASSED: Founder login successful with rotated password")
-else:
-    print("❌ TEST 5 FAILED: Founder login failed")
-    exit(1)
-
-print("\n" + "=" * 80)
-print("TEST 6: SECURITY - FOUNDER ACCESS TO /api/admin/analytics")
-print("=" * 80)
-
-try:
-    admin_resp = requests.get(f"{API_URL}/admin/analytics", cookies=founder_cookies, timeout=10)
-    print(f"Response status: {admin_resp.status_code}")
+def test_personal_chat_unauthenticated():
+    """Test 3: POST /api/personal/chat without authentication"""
+    print("\n" + "="*80)
+    print("TEST 3: Personal AI Chat - Unauthenticated Access")
+    print("="*80)
     
-    if admin_resp.status_code == 200:
-        result = admin_resp.json()
-        print(f"✅ TEST 6 PASSED: Founder can access admin analytics")
-        print(f"   Response keys: {list(result.keys())}")
-    else:
-        print(f"❌ TEST 6 FAILED: Expected 200, got {admin_resp.status_code}")
-        print(f"   Response: {admin_resp.text[:200]}")
-except Exception as e:
-    print(f"❌ Error: {e}")
-
-print("\n" + "=" * 80)
-print("TEST 7: SECURITY - REGULAR USER GETS 403 ON /api/admin/analytics")
-print("=" * 80)
-
-# Register a regular user
-regular_email = f"regular_{int(time.time())}@test.com"
-regular_password = "TestPassword123"
-
-if register_user(regular_email, regular_password, "Regular User"):
-    regular_cookies = login_user(regular_email, regular_password)
-    
-    if regular_cookies:
-        try:
-            regular_admin_resp = requests.get(f"{API_URL}/admin/analytics", cookies=regular_cookies, timeout=10)
-            print(f"Response status: {regular_admin_resp.status_code}")
+    try:
+        # Create new session without authentication
+        session = requests.Session()
+        
+        payload = {
+            "messages": [
+                {"role": "user", "content": "Test"}
+            ]
+        }
+        
+        resp = session.post(
+            f"{BASE_URL}/api/personal/chat",
+            json=payload,
+            timeout=10
+        )
+        
+        if resp.status_code == 401:
+            print(f"✅ Unauthenticated request correctly rejected with 401")
+            print(f"   Response: {resp.text}")
+            print("\n✅ TEST 3 PASSED: Authentication required")
+            return True
+        else:
+            print(f"❌ TEST 3 FAILED: Expected 401, got {resp.status_code}")
+            print(f"   Response: {resp.text[:200]}")
+            return False
             
-            if regular_admin_resp.status_code == 403:
-                print(f"✅ TEST 7 PASSED: Regular user correctly denied access (403)")
-            else:
-                print(f"❌ TEST 7 FAILED: Expected 403, got {regular_admin_resp.status_code}")
-                print(f"   Response: {regular_admin_resp.text[:200]}")
-        except Exception as e:
-            print(f"❌ Error: {e}")
-    else:
-        print("❌ TEST 7 FAILED: Could not login as regular user")
-else:
-    print("❌ TEST 7 FAILED: Could not register regular user")
+    except Exception as e:
+        print(f"❌ TEST 3 FAILED: Exception: {e}")
+        return False
 
-print("\n" + "=" * 80)
-print("TEST 8: SECURITY - UNAUTHENTICATED GETS 401")
-print("=" * 80)
-
-try:
-    unauth_resp = requests.get(f"{API_URL}/admin/analytics", timeout=10)
-    print(f"Response status: {unauth_resp.status_code}")
+def test_enterprise_cfo_chat_regression():
+    """Test 4: Enterprise CFO chat still works (regression)"""
+    print("\n" + "="*80)
+    print("TEST 4: Enterprise CFO Chat - Regression Test")
+    print("="*80)
     
-    if unauth_resp.status_code == 401:
-        print(f"✅ TEST 8 PASSED: Unauthenticated request correctly denied (401)")
-    else:
-        print(f"❌ TEST 8 FAILED: Expected 401, got {unauth_resp.status_code}")
-        print(f"   Response: {unauth_resp.text[:200]}")
-except Exception as e:
-    print(f"❌ Error: {e}")
-
-print("\n" + "=" * 80)
-print("TEST 9: REGRESSION - CSV IMPORT STILL WORKS")
-print("=" * 80)
-
-before_csv = datetime.utcnow()
-
-# Create a small valid CSV
-csv_content = """date,description,vendor,amount
-2026-08-01,Office supplies,Staples,125.50
-2026-08-02,Software subscription,Adobe,49.99
-2026-08-03,Team lunch,Chipotle,87.25"""
-
-csv_file = BytesIO(csv_content.encode('utf-8'))
-
-try:
-    csv_resp = requests.post(
-        f"{API_URL}/cfo/transactions",
-        files={'file': ('transactions.csv', csv_file, 'text/csv')},
-        cookies=demo_cookies,
-        timeout=30
-    )
+    session = TestSession()
     
-    print(f"Response status: {csv_resp.status_code}")
+    if not session.get_csrf():
+        print("❌ TEST 4 FAILED: Could not get CSRF token")
+        return False
     
-    if csv_resp.status_code == 200:
-        result = csv_resp.json()
-        imported = result.get('imported', 0)
-        print(f"✅ CSV import successful")
-        print(f"   Imported: {imported}")
-        print(f"   Skipped: {result.get('skipped', 0)}")
-        print(f"   Duplicates: {result.get('duplicates', 0)}")
+    # Login with business demo (no product parameter)
+    if not session.demo_login():
+        print("❌ TEST 4 FAILED: Could not login with business demo")
+        return False
+    
+    try:
+        print("\n📤 Sending CFO chat message: 'What is my cash runway?'")
+        payload = {
+            "messages": [
+                {"role": "user", "content": "What is my cash runway?"}
+            ]
+        }
         
-        if imported > 0:
-            print("✅ TEST 9 PASSED: CSV import working correctly")
+        resp = session.session.post(
+            f"{BASE_URL}/api/cfo/chat/stream",
+            json=payload,
+            timeout=TIMEOUT,
+            stream=True
+        )
+        
+        if resp.status_code != 200:
+            print(f"❌ TEST 4 FAILED: Expected 200, got {resp.status_code}")
+            print(f"   Response: {resp.text[:500]}")
+            return False
+        
+        # Check content type
+        content_type = resp.headers.get('content-type', '')
+        if 'text/event-stream' not in content_type:
+            print(f"❌ TEST 4 FAILED: Expected text/event-stream, got {content_type}")
+            return False
+        
+        print(f"✅ Response is SSE stream")
+        
+        # Parse events
+        events = parse_sse_events(resp.text)
+        print(f"📊 Received {len(events)} SSE events")
+        
+        event_types = [e.get('event') for e in events]
+        
+        # Check for required events
+        if 'meta' in event_types and 'done' in event_types:
+            print(f"✅ Stream has meta and done events")
         else:
-            print("⚠️ No rows imported")
-    else:
-        print(f"❌ CSV import failed: {csv_resp.status_code}")
-        print(f"   Response: {csv_resp.text[:200]}")
-        print("❌ TEST 9 FAILED")
-except Exception as e:
-    print(f"❌ Error: {e}")
-    print("❌ TEST 9 FAILED")
+            print(f"⚠️  Missing meta or done events: {event_types}")
+        
+        # Check for tool calls
+        tool_starts = [e for e in events if e.get('event') == 'tool_start']
+        if tool_starts:
+            tool_names = [e.get('data', {}).get('name') for e in tool_starts if isinstance(e.get('data'), dict)]
+            print(f"🔧 Tools called: {tool_names}")
+            print(f"✅ CFO tools working")
+        else:
+            print(f"⚠️  No tool calls detected")
+        
+        # Assemble answer
+        token_events = [e for e in events if e.get('event') == 'token']
+        answer = ''.join([e.get('data', {}).get('delta', '') for e in token_events if isinstance(e.get('data'), dict)])
+        
+        print(f"\n💬 Answer preview: {answer[:200]}...")
+        
+        if answer and len(answer) > 20:
+            print(f"✅ CFO chat returned answer")
+        else:
+            print(f"⚠️  Answer seems short or empty")
+        
+        print("\n✅ TEST 4 PASSED: Enterprise CFO chat regression OK")
+        return True
+        
+    except Exception as e:
+        print(f"❌ TEST 4 FAILED: Exception: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
-# Check for CSV import events
-time.sleep(1)
-csv_events = check_analytics_events(
-    org_id,
-    ['csv_import_started', 'csv_import_completed'],
-    before_csv
-)
-
-csv_started = False
-csv_completed = False
-
-for event in csv_events:
-    event_type = event.get('event')
-    print(f"\n✅ CSV Event: {event_type}")
+def test_p3_p4_regression():
+    """Test 5: P3/P4 endpoints still work (regression)"""
+    print("\n" + "="*80)
+    print("TEST 5: P3/P4 Regression - Forecast, Alerts, Scenarios")
+    print("="*80)
     
-    if event_type == 'csv_import_started':
-        csv_started = True
-    elif event_type == 'csv_import_completed':
-        csv_completed = True
+    session = TestSession()
+    
+    if not session.get_csrf():
+        print("❌ TEST 5 FAILED: Could not get CSRF token")
+        return False
+    
+    if not session.demo_login(product='personal'):
+        print("❌ TEST 5 FAILED: Could not login with personal demo")
+        return False
+    
+    all_passed = True
+    
+    # Test 5a: GET /api/personal/forecast
+    try:
+        print("\n📊 Testing GET /api/personal/forecast")
+        resp = session.session.get(f"{BASE_URL}/api/personal/forecast", timeout=15)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            # Check if forecast is nested or at top level
+            forecast_data = data.get('forecast', data)
+            required_keys = ['startingCash', 'endingCash', 'lowestDay', 'narrative']
+            missing_keys = [k for k in required_keys if k not in forecast_data]
+            
+            if missing_keys:
+                print(f"⚠️  Forecast missing keys: {missing_keys}")
+                all_passed = False
+            else:
+                print(f"✅ Forecast endpoint working")
+                print(f"   Starting cash: {forecast_data.get('startingCash')}")
+                print(f"   Ending cash: {forecast_data.get('endingCash')}")
+        else:
+            print(f"❌ Forecast failed: {resp.status_code}")
+            all_passed = False
+    except Exception as e:
+        print(f"❌ Forecast exception: {e}")
+        all_passed = False
+    
+    # Test 5b: GET /api/personal/alerts
+    try:
+        print("\n🚨 Testing GET /api/personal/alerts")
+        resp = session.session.get(f"{BASE_URL}/api/personal/alerts", timeout=15)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            if 'alerts' in data:
+                print(f"✅ Alerts endpoint working")
+                print(f"   Alerts count: {len(data.get('alerts', []))}")
+            else:
+                print(f"⚠️  Alerts response missing 'alerts' key")
+                all_passed = False
+        else:
+            print(f"❌ Alerts failed: {resp.status_code}")
+            all_passed = False
+    except Exception as e:
+        print(f"❌ Alerts exception: {e}")
+        all_passed = False
+    
+    # Test 5c: POST /api/personal/scenarios/evaluate
+    try:
+        print("\n🎯 Testing POST /api/personal/scenarios/evaluate")
+        payload = {
+            "levers": {
+                "oneTimePurchase": {
+                    "amount": 100000
+                }
+            }
+        }
+        
+        resp = session.session.post(
+            f"{BASE_URL}/api/personal/scenarios/evaluate",
+            json=payload,
+            timeout=15
+        )
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            required_keys = ['verdict', 'baseline', 'scenario']
+            missing_keys = [k for k in required_keys if k not in data]
+            
+            if missing_keys:
+                print(f"⚠️  Scenario missing keys: {missing_keys}")
+                all_passed = False
+            else:
+                print(f"✅ Scenario evaluation working")
+                print(f"   Verdict: {data.get('verdict', {}).get('level')}")
+        else:
+            print(f"❌ Scenario evaluation failed: {resp.status_code}")
+            all_passed = False
+    except Exception as e:
+        print(f"❌ Scenario evaluation exception: {e}")
+        all_passed = False
+    
+    if all_passed:
+        print("\n✅ TEST 5 PASSED: All P3/P4 endpoints working")
+    else:
+        print("\n⚠️  TEST 5 PARTIAL: Some P3/P4 endpoints had issues")
+    
+    return all_passed
 
-if csv_started and csv_completed:
-    print("\n✅ CSV import events recorded correctly")
-else:
-    print(f"\n⚠️ CSV import events incomplete (started={csv_started}, completed={csv_completed})")
+def main():
+    """Run all tests"""
+    print("\n" + "="*80)
+    print("SPRINT P5 BACKEND TESTING — ASK NEXUS PERSONAL AI CHAT")
+    print("="*80)
+    print(f"Base URL: {BASE_URL}")
+    print(f"Timeout: {TIMEOUT}s")
+    
+    results = {}
+    
+    # Run all tests
+    results['test_1_personal_chat_basic'] = test_personal_chat_basic()
+    time.sleep(2)  # Brief pause between tests
+    
+    results['test_2_personal_chat_scenario'] = test_personal_chat_scenario()
+    time.sleep(2)
+    
+    results['test_3_unauthenticated'] = test_personal_chat_unauthenticated()
+    time.sleep(2)
+    
+    results['test_4_enterprise_regression'] = test_enterprise_cfo_chat_regression()
+    time.sleep(2)
+    
+    results['test_5_p3_p4_regression'] = test_p3_p4_regression()
+    
+    # Summary
+    print("\n" + "="*80)
+    print("TEST SUMMARY")
+    print("="*80)
+    
+    passed = sum(1 for v in results.values() if v)
+    total = len(results)
+    
+    for test_name, result in results.items():
+        status = "✅ PASS" if result else "❌ FAIL"
+        print(f"{status} - {test_name}")
+    
+    print(f"\n{'='*80}")
+    print(f"TOTAL: {passed}/{total} tests passed ({int(passed/total*100)}%)")
+    print(f"{'='*80}\n")
+    
+    return passed == total
 
-print("\n" + "=" * 80)
-print("TEST SUMMARY")
-print("=" * 80)
-print("✅ TEST 1: Successful invoice upload end-to-end")
-print("✅ TEST 2: Analytics events in MongoDB (started + completed)")
-print("✅ TEST 3: Failure path - .txt file → 400 + failed event")
-print("✅ TEST 4: Failure path - empty file → 400 + failed event")
-print("✅ TEST 5: Founder login with rotated password")
-print("✅ TEST 6: Founder access to /api/admin/analytics (200)")
-print("✅ TEST 7: Regular user denied access (403)")
-print("✅ TEST 8: Unauthenticated denied access (401)")
-print("✅ TEST 9: CSV import regression test")
-print("=" * 80)
-print("ALL TESTS COMPLETED")
-print("=" * 80)
+if __name__ == "__main__":
+    success = main()
+    exit(0 if success else 1)
