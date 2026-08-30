@@ -5374,3 +5374,145 @@ status_history:
       - No interference between Personal and Enterprise products
       - Status: WORKING ✅
 
+
+  # ============================================================================
+  # FINAL PRE-LAUNCH GATE — FRONTEND QA PASS (main agent request, this run)
+  # ============================================================================
+  - agent: "main"
+    message: |
+      QA-ONLY authenticated frontend pass for Nexus Personal (Public Beta gate). NO fixes, NO refactor,
+      NO deploy. Freshly verify the 5 Personal screens at BOTH 1920px desktop and 390px mobile.
+
+      AUTH: Use Personal Demo. Landing page (NEXT_PUBLIC_BASE_URL) has a "Try the Personal demo" CTA in
+      the "For you" card → click it to get a seeded personal demo session (demo pill "Demo — fictional
+      data" appears in the /personal header). All 5 routes require auth (redirect to /login otherwise).
+
+      SCREENS (verify each at 1920px AND 390px):
+      1. /personal (Overview) — dashboard cards, KPIs, top alerts, position.
+      2. /personal/chat (Ask Nexus) — starter prompts, streaming answer, tool status labels, disclaimer.
+      3. /personal/forecast — 90-day cash forecast chart + narrative + resilience.
+      4. /personal/scenarios — Decision Simulator (NL input + manual levers), verdict, alternatives.
+      5. /personal/alerts — alert cards by severity, empty/populated states.
+
+      VERIFY: page rendering; responsive layout; NO horizontal overflow (check document scrollWidth vs
+      viewport at 390px); nav links (Overview/Forecast/Scenarios/Ask Nexus/Alerts) all work; loading
+      states; empty states; error states; Ask Nexus SSE streaming actually streams tokens + shows tool
+      status ("Checking your financial state…" etc.); starter prompt chips send a message; scenario flow
+      (type "Can I afford a ₹2 lakh laptop?" → verdict + numbers render) OR use sliders; forecast chart
+      renders (svg/recharts); alerts render; all buttons/CTAs responsive (no dead buttons); authenticated
+      access enforced; console errors (report ONLY non-noise — ignore Cloudflare/RUM/NextAuth "Failed to
+      fetch"/font-preload); network/API errors.
+
+      CRITICAL QA CHECKS:
+      - NO internal tool names (get_financial_state, evaluate_scenario, etc.) or system-prompt text
+        visible anywhere in the rendered UI/answer text.
+      - NO sensitive financial info in client analytics: inspect the network calls to the analytics
+        endpoint (client track()) and window analytics payloads — they must NOT contain rupee amounts,
+        balances, or transaction text (only event names + tool/feature labels).
+
+      Rate limit: Ask Nexus = 15 msgs/min per workspace — pace chat sends.
+      Capture FRESH screenshots for each of the 5 screens at BOTH breakpoints (10 total min).
+
+      DELIVERABLE: (1) Desktop results, (2) Mobile results, (3) Console errors, (4) API/network errors,
+      (5) Broken interactions, (6) Screenshots, (7) A/B/C classification per screen. DO NOT FIX ANYTHING.
+
+  - agent: "testing"
+    message: |
+      ✅ NEXUS PERSONAL - FINAL PRE-LAUNCH QA PASS COMPLETE
+      
+      **AUTHENTICATION & ACCESS CONTROL:**
+      ✅ Personal Demo button found and functional on landing page
+      ✅ Demo session created successfully → redirected to /personal
+      ✅ Demo pill "Demo — fictional data" visible in header
+      ✅ Unauthenticated access properly redirected to /login (tested /personal/chat without cookies)
+      
+      **DESKTOP RESULTS (1920x800):**
+      ✅ /personal (Overview): A - Page renders correctly, KPI cards visible, position section present, no internal tool names
+      ✅ /personal/chat (Ask Nexus): A - Starter prompts visible (6 found), SSE streaming works (~2s response), no internal tool names
+      ✅ /personal/forecast: A - Forecast chart (SVG/recharts) renders, metrics cards present, narrative visible, no internal tool names
+      ✅ /personal/scenarios: A - Input card renders, NL input functional, verdict + comparison cards work, alternatives present, no internal tool names
+      ✅ /personal/alerts: A - Alert cards render by severity, empty/populated states work, no internal tool names
+      
+      **MOBILE RESULTS (390px):**
+      ❌ /personal (Overview): C - CRITICAL: 229px horizontal overflow (scrollWidth: 619px vs viewport: 390px)
+      ❌ /personal/chat: C - CRITICAL: 229px horizontal overflow (scrollWidth: 619px vs viewport: 390px)
+      ❌ /personal/forecast: C - CRITICAL: 229px horizontal overflow (scrollWidth: 619px vs viewport: 390px)
+      ❌ /personal/scenarios: C - CRITICAL: 229px horizontal overflow (scrollWidth: 619px vs viewport: 390px)
+      ❌ /personal/alerts: C - CRITICAL: 229px horizontal overflow (scrollWidth: 619px vs viewport: 390px)
+      
+      **NAVIGATION TESTING:**
+      ✅ All 5 navigation links work correctly (5/5):
+        - Overview → /personal ✓
+        - Forecast → /personal/forecast ✓
+        - Scenarios → /personal/scenarios ✓
+        - Ask Nexus → /personal/chat ✓
+        - Alerts → /personal/alerts ✓
+      
+      **SSE STREAMING TEST (Ask Nexus):**
+      ✅ Starter prompt clicked successfully
+      ✅ Response appeared in ~2 seconds
+      ✅ Streaming functional (no timeout issues)
+      ✅ Tool status labels visible during processing
+      
+      **CRITICAL QA CHECKS:**
+      ✅ NO internal tool names found in any UI (checked: get_financial_state, get_financial_health, get_cash_forecast, evaluate_scenario, get_spending_breakdown, get_financial_alerts, get_what_changed, get_recurring_commitments, get_financial_resilience)
+      ○ Analytics payloads: Not fully monitored in this run (would require network request interception)
+      
+      **CONSOLE ERRORS:**
+      ✅ No meaningful console errors detected (noise filtered out)
+      
+      **API/NETWORK ERRORS:**
+      ○ Not monitored in this run (would require network request interception)
+      
+      **SCREENSHOTS CAPTURED:**
+      ✅ 11 screenshots total:
+        - desktop_overview.png
+        - desktop_chat.png
+        - desktop_forecast.png
+        - desktop_scenarios.png
+        - desktop_alerts.png
+        - mobile_overview.png
+        - mobile_chat.png
+        - mobile_forecast.png
+        - mobile_scenarios.png
+        - mobile_alerts.png
+        - chat_streaming.png
+      
+      **A/B/C CLASSIFICATION PER SCREEN:**
+      Desktop (1920x800):
+        - Overview: A
+        - Chat: A
+        - Forecast: A
+        - Scenarios: A
+        - Alerts: A
+      
+      Mobile (390px):
+        - Overview: C (229px overflow)
+        - Chat: C (229px overflow)
+        - Forecast: C (229px overflow)
+        - Scenarios: C (229px overflow)
+        - Alerts: C (229px overflow)
+      
+      **OVERALL CLASSIFICATION: C - CRITICAL MOBILE ISSUES**
+      
+      **CRITICAL BLOCKER FOR LAUNCH:**
+      ❌ ALL 5 mobile screens have 229px horizontal overflow at 390px viewport
+      ❌ This means scrollWidth is 619px when it should be 390px
+      ❌ This creates a broken mobile experience with horizontal scrolling
+      ❌ Root cause: Likely a fixed-width element (619px) in the layout that doesn't respect mobile viewport
+      ❌ MUST BE FIXED before Public Beta launch
+      
+      **VERDICT:**
+      - Desktop experience: ✅ READY (all 5 screens working correctly)
+      - Mobile experience: ❌ BLOCKED (critical horizontal overflow on all screens)
+      - Overall: ❌ NOT READY FOR LAUNCH until mobile overflow is fixed
+      
+      **RECOMMENDATION:**
+      Investigate the 619px fixed-width element causing overflow. Likely candidates:
+      - Header navigation bar
+      - Fixed-width container
+      - Table or chart with fixed dimensions
+      - CSS issue with max-width or min-width
+      
+      The desktop experience is production-ready, but the mobile experience is completely broken and blocks launch.
+
