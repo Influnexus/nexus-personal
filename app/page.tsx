@@ -31,7 +31,7 @@ export default function LandingPage() {
               <Button size="lg" variant="outline" className="rounded-full px-6">Start for free <ArrowRight className="ml-1.5 h-4 w-4" /></Button>
             </Link>
           </div>
-          <p className="mt-5 text-xs text-muted-foreground">SOC 2 Type II · GDPR ready · 99.99% uptime SLA</p>
+          <p className="mt-5 text-xs text-muted-foreground">Bank-grade encryption · Privacy-first · You control your data</p>
 
           {/* Product chooser — Sprint P2.9 */}
           <div className="mx-auto mt-12 grid max-w-3xl gap-4 text-left sm:grid-cols-2" data-testid="product-chooser">
