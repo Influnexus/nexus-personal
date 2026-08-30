@@ -221,7 +221,7 @@ export default function PersonalForecastPage() {
           <CardTitle className="text-sm font-semibold text-muted-foreground">
             Where is my money going?
           </CardTitle>
-          <div className="flex items-baseline gap-3 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <span>Today: <b className="text-foreground">{formatMoney(forecast.startingCash, currency)}</b></span>
             <span>→</span>
             <span>30d: <b className="text-foreground">{formatMoney(day30?.cash || 0, currency)}</b></span>
