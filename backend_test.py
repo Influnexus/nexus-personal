@@ -16,7 +16,7 @@ API_BASE = f"{BASE_URL}/api"
 
 # Test credentials
 FOUNDER_EMAIL = "founder@nexusai.com"
-FOUNDER_PASSWORD = "FxeCgujuk8kA2PWNUO2qRu7"
+FOUNDER_PASSWORD = "REDACTED_SET_VIA_ENV"
 
 # Color codes for output
 GREEN = '\033[92m'

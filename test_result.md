@@ -2099,7 +2099,7 @@ backend:
           4. Unauthenticated POST to both /order and /verify -> 401.
           5. POST /api/billing/razorpay/verify with a well-formed but WRONG signature -> 400, verified:false,
              and confirm GET /api/billing/subscription is unaffected (still whatever it was before).
-          6. POST /api/billing/razorpay/verify with a CORRECT signature (compute HMAC-SHA256(order_id+"|"+fake_payment_id, "kiLZfoAX1MFp1vjVJ90B3oRx") in the test script) for a freshly created order -> 200
+          6. POST /api/billing/razorpay/verify with a CORRECT signature (compute HMAC-SHA256(order_id+"|"+fake_payment_id, "REDACTED") in the test script) for a freshly created order -> 200
              verified:true, then GET /api/billing/subscription shows status="active", provider="razorpay",
              and GET /api/billing/invoices shows a new paid invoice matching the order amount.
           7. Missing required fields in /verify body -> 400.
@@ -2125,7 +2125,7 @@ backend:
           - orderId: order_T9NWi2BaRJlLyH (starts with "order_" ✓)
           - amount: 499900 paise (₹4999) ✓
           - currency: INR ✓
-          - keyId: rzp_test_T9NJcBZijywoUJ ✓
+          - keyId: REDACTED ✓
           
           **TEST 2: Growth Yearly Order Creation - ✅ PASS**
           - POST /api/billing/razorpay/order with {"plan":"growth","interval":"yearly"}
@@ -4111,7 +4111,7 @@ agent_communication:
       - Analytics event recorded: invoice_upload_failed with meta.reason='empty_file' ✓
       
       **5. ✅ SECURITY - FOUNDER LOGIN WITH ROTATED PASSWORD**
-      - Credentials: founder@nexusai.com / FxeCgujuk8kA2PWNUO2qRu7 (from /app/memory/test_credentials.md)
+      - Credentials: founder@nexusai.com / REDACTED (from /app/memory/test_credentials.md)
       - Login successful ✓
       - Session created correctly ✓
       - **ROTATED PASSWORD VERIFIED**
