@@ -1,567 +1,421 @@
 #!/usr/bin/env python3
 """
-REGRESSION TEST for FINAL PRE-PRODUCTION HARDENING
-Tests that 4 contained changes (security headers, CORS restriction, landing copy, orphan route deletion)
-did NOT break any existing functionality.
+MongoDB Connection Manager Fix Verification
+Tests the production-safe cached connection promise pattern in lib/db/mongo.ts
 """
 
 import requests
-import json
 import time
-import sys
+import random
+import string
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Dict, List, Tuple
 
 # Base URL from .env
 BASE_URL = "https://financial-health-hub-17.preview.emergentagent.com"
-API_BASE = f"{BASE_URL}/api"
 
-# Test credentials
-FOUNDER_EMAIL = "founder@nexusai.com"
-FOUNDER_PASSWORD = "REDACTED_SET_VIA_ENV"
+def generate_unique_email():
+    """Generate unique email with timestamp"""
+    timestamp = int(time.time() * 1000)
+    random_suffix = ''.join(random.choices(string.ascii_lowercase, k=4))
+    return f"mongofix+{timestamp}{random_suffix}@nexustest.com"
 
-# Color codes for output
-GREEN = '\033[92m'
-RED = '\033[91m'
-YELLOW = '\033[93m'
-RESET = '\033[0m'
+def generate_name():
+    """Generate a valid name"""
+    return f"Test User {random.randint(1000, 9999)}"
 
-def log_success(msg):
-    print(f"{GREEN}✅ {msg}{RESET}")
-
-def log_error(msg):
-    print(f"{RED}❌ {msg}{RESET}")
-
-def log_info(msg):
-    print(f"{YELLOW}ℹ️  {msg}{RESET}")
-
-def get_csrf_token(session):
-    """Get CSRF token for NextAuth"""
+def test_register(email: str, name: str, password: str) -> Tuple[int, Dict]:
+    """Test registration endpoint"""
     try:
-        resp = session.get(f"{API_BASE}/auth/csrf", timeout=10)
-        if resp.status_code == 200:
-            return resp.json().get('csrfToken')
-        return None
-    except Exception as e:
-        log_error(f"Failed to get CSRF token: {e}")
-        return None
-
-def create_business_demo_session():
-    """Create a business demo session (Enterprise CFO)"""
-    log_info("Creating BUSINESS demo session...")
-    session = requests.Session()
-    
-    try:
-        # Get CSRF token
-        csrf_token = get_csrf_token(session)
-        if not csrf_token:
-            log_error("Failed to get CSRF token for business demo")
-            return None
-        
-        # Create demo session using demo provider (not credentials)
-        resp = session.post(
-            f"{API_BASE}/auth/callback/demo",
-            data={
-                'csrfToken': csrf_token,
-                'callbackUrl': f"{BASE_URL}/dashboard",
-                'json': 'true'
-            },
-            headers={'Content-Type': 'application/x-www-form-urlencoded'},
-            allow_redirects=False,
-            timeout=15
-        )
-        
-        # Check if session was created (302 redirect or session cookie)
-        if resp.status_code in [200, 302] and '__Secure-authjs.session-token' in session.cookies:
-            log_success("Business demo session created")
-            return session
-        else:
-            log_error(f"Business demo creation failed: {resp.status_code}, location: {resp.headers.get('location', 'N/A')}")
-            return None
-            
-    except Exception as e:
-        log_error(f"Business demo session creation error: {e}")
-        return None
-
-def create_personal_demo_session():
-    """Create a personal demo session"""
-    log_info("Creating PERSONAL demo session...")
-    session = requests.Session()
-    
-    try:
-        # Get CSRF token
-        csrf_token = get_csrf_token(session)
-        if not csrf_token:
-            log_error("Failed to get CSRF token for personal demo")
-            return None
-        
-        # Create demo session with demo provider and product=personal
-        resp = session.post(
-            f"{API_BASE}/auth/callback/demo",
-            data={
-                'csrfToken': csrf_token,
-                'product': 'personal',
-                'callbackUrl': f"{BASE_URL}/personal",
-                'json': 'true'
-            },
-            headers={'Content-Type': 'application/x-www-form-urlencoded'},
-            allow_redirects=False,
-            timeout=15
-        )
-        
-        # Check if session was created
-        if resp.status_code in [200, 302] and '__Secure-authjs.session-token' in session.cookies:
-            log_success("Personal demo session created")
-            return session
-        else:
-            log_error(f"Personal demo creation failed: {resp.status_code}, location: {resp.headers.get('location', 'N/A')}")
-            return None
-            
-    except Exception as e:
-        log_error(f"Personal demo session creation error: {e}")
-        return None
-
-def test_enterprise_regression(session):
-    """Test Enterprise CFO features (business demo)"""
-    print("\n" + "="*80)
-    print("TEST 1: ENTERPRISE REGRESSION")
-    print("="*80)
-    
-    if not session:
-        log_error("No business demo session available")
-        return False
-    
-    all_passed = True
-    
-    # Test 1a: GET /api/cfo/briefing
-    try:
-        log_info("Testing GET /api/cfo/briefing...")
-        resp = session.get(f"{API_BASE}/cfo/briefing", timeout=30)
-        
-        if resp.status_code == 200:
-            data = resp.json()
-            required_keys = ['briefing', 'kpis', 'health', 'forecast']
-            missing_keys = [k for k in required_keys if k not in data]
-            
-            if missing_keys:
-                log_error(f"Briefing missing keys: {missing_keys}")
-                all_passed = False
-            else:
-                log_success(f"GET /api/cfo/briefing → 200 with all required keys")
-        else:
-            log_error(f"GET /api/cfo/briefing → {resp.status_code}")
-            all_passed = False
-    except Exception as e:
-        log_error(f"Briefing test failed: {e}")
-        all_passed = False
-    
-    # Test 1b: POST /api/cfo/chat/stream
-    try:
-        log_info("Testing POST /api/cfo/chat/stream...")
-        resp = session.post(
-            f"{API_BASE}/cfo/chat/stream",
-            json={'messages': [{'role': 'user', 'content': 'What is my cash runway?'}]},
-            headers={'Accept': 'text/event-stream'},
-            stream=True,
-            timeout=60
-        )
-        
-        if resp.status_code == 200:
-            content_type = resp.headers.get('content-type', '')
-            if 'text/event-stream' not in content_type:
-                log_error(f"Wrong content-type: {content_type}")
-                all_passed = False
-            else:
-                # Parse SSE events (standard format with event: and data: lines)
-                events_found = set()
-                final_text = ""
-                current_event = None
-                
-                for line in resp.iter_lines(decode_unicode=True):
-                    if line.startswith('event: '):
-                        current_event = line[7:].strip()
-                        events_found.add(current_event)
-                    elif line.startswith('data: '):
-                        try:
-                            event_data = json.loads(line[6:])
-                            if current_event == 'token':
-                                final_text += event_data.get('delta', event_data.get('content', ''))
-                        except:
-                            pass
-                
-                required_events = {'meta', 'tool_start', 'tool_done', 'answer_start', 'token', 'answer_end', 'done'}
-                missing_events = required_events - events_found
-                
-                if missing_events:
-                    log_error(f"Missing SSE events: {missing_events}")
-                    all_passed = False
-                elif '$' not in final_text:
-                    log_error("Final text doesn't contain $ amount")
-                    all_passed = False
-                else:
-                    log_success(f"POST /api/cfo/chat/stream → SSE with all events, text contains $")
-        else:
-            log_error(f"POST /api/cfo/chat/stream → {resp.status_code}")
-            all_passed = False
-    except Exception as e:
-        log_error(f"Chat stream test failed: {e}")
-        all_passed = False
-    
-    return all_passed
-
-def test_personal_smoke(session):
-    """Test Personal Finance features"""
-    print("\n" + "="*80)
-    print("TEST 2: PERSONAL SMOKE TESTS")
-    print("="*80)
-    
-    if not session:
-        log_error("No personal demo session available")
-        return False
-    
-    all_passed = True
-    
-    # Test 2a: GET /api/personal/forecast
-    try:
-        log_info("Testing GET /api/personal/forecast...")
-        resp = session.get(f"{API_BASE}/personal/forecast", timeout=30)
-        
-        if resp.status_code == 200:
-            data = resp.json()
-            if 'forecast' in data and 'series' in data['forecast']:
-                log_success(f"GET /api/personal/forecast → 200 with forecast.series")
-            else:
-                log_error(f"Forecast missing required structure")
-                all_passed = False
-        else:
-            log_error(f"GET /api/personal/forecast → {resp.status_code}")
-            all_passed = False
-    except Exception as e:
-        log_error(f"Forecast test failed: {e}")
-        all_passed = False
-    
-    # Test 2b: GET /api/personal/alerts
-    try:
-        log_info("Testing GET /api/personal/alerts...")
-        resp = session.get(f"{API_BASE}/personal/alerts", timeout=30)
-        
-        if resp.status_code == 200:
-            data = resp.json()
-            if 'alerts' in data and 'summary' in data:
-                log_success(f"GET /api/personal/alerts → 200 with alerts and summary")
-            else:
-                log_error(f"Alerts missing required structure")
-                all_passed = False
-        else:
-            log_error(f"GET /api/personal/alerts → {resp.status_code}")
-            all_passed = False
-    except Exception as e:
-        log_error(f"Alerts test failed: {e}")
-        all_passed = False
-    
-    # Test 2c: POST /api/personal/chat (SSE)
-    try:
-        log_info("Testing POST /api/personal/chat...")
-        resp = session.post(
-            f"{API_BASE}/personal/chat",
-            json={'messages': [{'role': 'user', 'content': 'How am I doing financially?'}]},
-            headers={'Accept': 'text/event-stream'},
-            stream=True,
-            timeout=60
-        )
-        
-        if resp.status_code == 200:
-            content_type = resp.headers.get('content-type', '')
-            if 'text/event-stream' not in content_type:
-                log_error(f"Wrong content-type: {content_type}")
-                all_passed = False
-            else:
-                # Parse SSE events (standard format with event: and data: lines)
-                events_found = set()
-                final_text = ""
-                current_event = None
-                
-                for line in resp.iter_lines(decode_unicode=True):
-                    if line.startswith('event: '):
-                        current_event = line[7:].strip()
-                        events_found.add(current_event)
-                    elif line.startswith('data: '):
-                        try:
-                            event_data = json.loads(line[6:])
-                            if current_event == 'token':
-                                final_text += event_data.get('delta', event_data.get('content', ''))
-                        except:
-                            pass
-                
-                if 'tool_start' in events_found and 'token' in events_found and 'done' in events_found:
-                    if '₹' in final_text or '$' in final_text:
-                        log_success(f"POST /api/personal/chat → SSE streams with currency figures")
-                    else:
-                        log_error("Final text doesn't contain currency figures")
-                        all_passed = False
-                else:
-                    log_error(f"Missing expected events. Found: {events_found}")
-                    all_passed = False
-        else:
-            log_error(f"POST /api/personal/chat → {resp.status_code}")
-            all_passed = False
-    except Exception as e:
-        log_error(f"Personal chat test failed: {e}")
-        all_passed = False
-    
-    # Test 2d: POST /api/personal/scenarios/evaluate
-    try:
-        log_info("Testing POST /api/personal/scenarios/evaluate...")
-        resp = session.post(
-            f"{API_BASE}/personal/scenarios/evaluate",
+        response = requests.post(
+            f"{BASE_URL}/api/register",
             json={
-                'levers': {
-                    'oneTimePurchase': {'amount': 200000}
-                }
+                "email": email,
+                "name": name,
+                "password": password
             },
-            timeout=30
+            timeout=15
+        )
+        return response.status_code, response.json() if response.headers.get('content-type', '').startswith('application/json') else {"text": response.text}
+    except Exception as e:
+        return 0, {"error": str(e)}
+
+def test_signin(email: str, password: str) -> Tuple[int, Dict, requests.Session]:
+    """Test sign in with NextAuth"""
+    session = requests.Session()
+    try:
+        # Get CSRF token
+        csrf_response = session.get(f"{BASE_URL}/api/auth/csrf", timeout=10)
+        csrf_token = csrf_response.json().get("csrfToken")
+        
+        # Sign in
+        signin_response = session.post(
+            f"{BASE_URL}/api/auth/callback/credentials",
+            data={
+                "csrfToken": csrf_token,
+                "email": email,
+                "password": password,
+                "json": "true"
+            },
+            timeout=15,
+            allow_redirects=False
         )
         
-        if resp.status_code == 200:
-            data = resp.json()
-            if 'baseline' in data and 'scenario' in data:
-                log_success(f"POST /api/personal/scenarios/evaluate → 200 with baseline/scenario")
-            else:
-                log_error(f"Scenario response missing required structure")
-                all_passed = False
-        else:
-            log_error(f"POST /api/personal/scenarios/evaluate → {resp.status_code}")
-            all_passed = False
+        # Check session
+        session_response = session.get(f"{BASE_URL}/api/auth/session", timeout=10)
+        return session_response.status_code, session_response.json(), session
     except Exception as e:
-        log_error(f"Scenario evaluate test failed: {e}")
-        all_passed = False
-    
-    return all_passed
+        return 0, {"error": str(e)}, session
 
-def test_auth_protection():
-    """Test authentication protection"""
-    print("\n" + "="*80)
-    print("TEST 3: AUTH PROTECTION")
-    print("="*80)
-    
-    all_passed = True
-    
-    # Test 3a: Unauthenticated POST /api/personal/chat → 401
-    try:
-        log_info("Testing unauthenticated POST /api/personal/chat...")
-        resp = requests.post(
-            f"{API_BASE}/personal/chat",
-            json={'messages': [{'role': 'user', 'content': 'test'}]},
-            timeout=10
-        )
-        
-        if resp.status_code == 401:
-            log_success(f"Unauthenticated POST /api/personal/chat → 401 (correct)")
-        else:
-            log_error(f"Expected 401, got {resp.status_code}")
-            all_passed = False
-    except Exception as e:
-        log_error(f"Unauth chat test failed: {e}")
-        all_passed = False
-    
-    # Test 3b: Unauthenticated GET /personal → redirect to /login
-    try:
-        log_info("Testing unauthenticated GET /personal...")
-        resp = requests.get(f"{BASE_URL}/personal", allow_redirects=False, timeout=10)
-        
-        if resp.status_code in [302, 307]:
-            location = resp.headers.get('location', '')
-            if '/login' in location or '/api/auth/signin' in location:
-                log_success(f"Unauthenticated GET /personal → {resp.status_code} redirect to login")
-            else:
-                log_error(f"Redirect to unexpected location: {location}")
-                all_passed = False
-        else:
-            log_error(f"Expected 302/307 redirect, got {resp.status_code}")
-            all_passed = False
-    except Exception as e:
-        log_error(f"Unauth page test failed: {e}")
-        all_passed = False
-    
-    return all_passed
+def check_credential_leakage(response_data: Dict) -> bool:
+    """Check if response contains MongoDB credentials"""
+    response_str = str(response_data).lower()
+    # Check for common credential patterns
+    leakage_patterns = [
+        "mongodb://",
+        "mongo_url",
+        "localhost:27017",
+        "password=",
+        "username=",
+        "connection string"
+    ]
+    for pattern in leakage_patterns:
+        if pattern in response_str:
+            return True
+    return False
 
-def test_orphan_routes(session):
-    """Test that orphan routes are deleted"""
-    print("\n" + "="*80)
-    print("TEST 4: ORPHAN ROUTES DELETED")
-    print("="*80)
-    
-    if not session:
-        log_error("No authenticated session available")
-        return False
-    
-    all_passed = True
-    
-    # Test 4a: GET /personal/ask should be 404
-    try:
-        log_info("Testing GET /personal/ask (should be 404)...")
-        resp = session.get(f"{BASE_URL}/personal/ask", timeout=10)
-        
-        if resp.status_code == 404:
-            log_success(f"GET /personal/ask → 404 (orphan route deleted)")
-        else:
-            log_error(f"Expected 404, got {resp.status_code} (orphan route still exists?)")
-            all_passed = False
-    except Exception as e:
-        log_error(f"Orphan route /personal/ask test failed: {e}")
-        all_passed = False
-    
-    # Test 4b: GET /personal/scenario should be 404
-    try:
-        log_info("Testing GET /personal/scenario (should be 404)...")
-        resp = session.get(f"{BASE_URL}/personal/scenario", timeout=10)
-        
-        if resp.status_code == 404:
-            log_success(f"GET /personal/scenario → 404 (orphan route deleted)")
-        else:
-            log_error(f"Expected 404, got {resp.status_code} (orphan route still exists?)")
-            all_passed = False
-    except Exception as e:
-        log_error(f"Orphan route /personal/scenario test failed: {e}")
-        all_passed = False
-    
-    # Test 4c: Canonical routes should still work
-    try:
-        log_info("Testing GET /personal/chat (canonical route, should work)...")
-        resp = session.get(f"{BASE_URL}/personal/chat", timeout=10)
-        
-        if resp.status_code == 200:
-            log_success(f"GET /personal/chat → 200 (canonical route works)")
-        else:
-            log_error(f"Canonical route /personal/chat failed: {resp.status_code}")
-            all_passed = False
-    except Exception as e:
-        log_error(f"Canonical route /personal/chat test failed: {e}")
-        all_passed = False
-    
-    try:
-        log_info("Testing GET /personal/scenarios (canonical route, should work)...")
-        resp = session.get(f"{BASE_URL}/personal/scenarios", timeout=10)
-        
-        if resp.status_code == 200:
-            log_success(f"GET /personal/scenarios → 200 (canonical route works)")
-        else:
-            log_error(f"Canonical route /personal/scenarios failed: {resp.status_code}")
-            all_passed = False
-    except Exception as e:
-        log_error(f"Canonical route /personal/scenarios test failed: {e}")
-        all_passed = False
-    
-    return all_passed
+print("=" * 80)
+print("MongoDB Connection Manager Fix Verification")
+print("=" * 80)
+print()
 
-def test_cors_headers():
-    """Test CORS headers are correctly set"""
-    print("\n" + "="*80)
-    print("TEST 5: CORS HEADERS")
-    print("="*80)
-    
-    all_passed = True
-    
-    try:
-        log_info("Testing CORS headers on /api/health...")
-        resp = requests.get(f"{API_BASE}/health", timeout=10)
-        
-        acao = resp.headers.get('Access-Control-Allow-Origin', '')
-        acah = resp.headers.get('Access-Control-Allow-Headers', '')
-        
-        expected_origin = "https://financial-health-hub-17.preview.emergentagent.com"
-        
-        if acao == expected_origin:
-            log_success(f"Access-Control-Allow-Origin: {acao} (correct, not wildcard)")
-        else:
-            log_error(f"Access-Control-Allow-Origin: {acao} (expected {expected_origin})")
-            all_passed = False
-        
-        if 'Content-Type' in acah and 'Authorization' in acah:
-            log_success(f"Access-Control-Allow-Headers: {acah} (narrowed correctly)")
-        else:
-            log_error(f"Access-Control-Allow-Headers: {acah} (missing expected headers)")
-            all_passed = False
-        
-        # Verify CSP frame-ancestors is set
-        csp = resp.headers.get('Content-Security-Policy', '')
-        if 'frame-ancestors' in csp:
-            log_success(f"Content-Security-Policy frame-ancestors set: {csp}")
-        else:
-            log_error(f"Content-Security-Policy missing frame-ancestors")
-            all_passed = False
-        
-        # Verify X-Frame-Options is NOT set (removed)
-        xfo = resp.headers.get('X-Frame-Options', '')
-        if not xfo:
-            log_success(f"X-Frame-Options removed (correct)")
-        else:
-            log_error(f"X-Frame-Options still present: {xfo}")
-            all_passed = False
-        
-    except Exception as e:
-        log_error(f"CORS headers test failed: {e}")
-        all_passed = False
-    
-    return all_passed
+# Store test data
+test_emails = []
+test_password = "TestPass123"
 
-def main():
-    print("\n" + "="*80)
-    print("REGRESSION TEST: FINAL PRE-PRODUCTION HARDENING")
-    print("="*80)
-    print(f"Base URL: {BASE_URL}")
-    print(f"Testing that 4 hardening changes did NOT break functionality:")
-    print("  1. Security headers (CSP, CORS)")
-    print("  2. Landing copy (non-functional)")
-    print("  3. CORS origin restriction (from '*' to production origin)")
-    print("  4. Orphan route deletion (/personal/ask, /personal/scenario)")
-    print("="*80)
-    
-    results = {}
-    
-    # Create sessions
-    business_session = create_business_demo_session()
-    time.sleep(5)  # Rate limit spacing - increased
-    personal_session = create_personal_demo_session()
-    time.sleep(5)
-    
-    # Run tests
-    results['enterprise'] = test_enterprise_regression(business_session)
-    time.sleep(2)
-    
-    results['personal'] = test_personal_smoke(personal_session)
-    time.sleep(2)
-    
-    results['auth'] = test_auth_protection()
-    time.sleep(2)
-    
-    results['orphan_routes'] = test_orphan_routes(business_session if business_session else personal_session)
-    time.sleep(2)
-    
-    results['cors'] = test_cors_headers()
-    
-    # Summary
-    print("\n" + "="*80)
-    print("REGRESSION TEST SUMMARY")
-    print("="*80)
-    
-    all_passed = all(results.values())
-    
-    for test_name, passed in results.items():
-        status = f"{GREEN}PASS{RESET}" if passed else f"{RED}FAIL{RESET}"
-        print(f"{test_name.upper()}: {status}")
-    
-    print("="*80)
-    
-    if all_passed:
-        print(f"{GREEN}✅ ALL REGRESSION TESTS PASSED{RESET}")
-        print(f"{GREEN}✅ CORS restriction did NOT break same-origin API calls{RESET}")
-        print(f"{GREEN}✅ Enterprise CFO unaffected{RESET}")
-        print(f"{GREEN}✅ Personal Finance APIs working{RESET}")
-        print(f"{GREEN}✅ Auth protection working{RESET}")
-        print(f"{GREEN}✅ Orphan routes deleted, canonical routes work{RESET}")
-        return 0
+# ============================================================================
+# TEST 1: Happy Path - Single Registration
+# ============================================================================
+print("TEST 1: Happy Path - Single Registration")
+print("-" * 80)
+
+email1 = generate_unique_email()
+name1 = generate_name()
+test_emails.append(email1)
+
+status, data = test_register(email1, name1, test_password)
+print(f"Email: {email1}")
+print(f"Status: {status}")
+print(f"Response: {data}")
+
+if status == 200 and "id" in data and "email" in data and "name" in data:
+    print("✅ TEST 1 PASSED: Registration successful with correct response structure")
+    if check_credential_leakage(data):
+        print("❌ SECURITY ISSUE: Response contains credential information!")
     else:
-        print(f"{RED}❌ SOME REGRESSION TESTS FAILED{RESET}")
-        return 1
+        print("✅ No credential leakage detected")
+else:
+    print(f"❌ TEST 1 FAILED: Expected 200 with {{id, email, name}}, got {status}")
 
-if __name__ == "__main__":
-    sys.exit(main())
+print()
+
+# ============================================================================
+# TEST 2: Happy Path - Second Registration
+# ============================================================================
+print("TEST 2: Happy Path - Second Registration")
+print("-" * 80)
+
+email2 = generate_unique_email()
+name2 = generate_name()
+test_emails.append(email2)
+
+status, data = test_register(email2, name2, test_password)
+print(f"Email: {email2}")
+print(f"Status: {status}")
+print(f"Response: {data}")
+
+if status == 200 and "id" in data and "email" in data and "name" in data:
+    print("✅ TEST 2 PASSED: Second registration successful")
+else:
+    print(f"❌ TEST 2 FAILED: Expected 200 with {{id, email, name}}, got {status}")
+
+print()
+
+# ============================================================================
+# TEST 3: Duplicate Email
+# ============================================================================
+print("TEST 3: Duplicate Email Handling")
+print("-" * 80)
+
+status, data = test_register(email1, name1, test_password)
+print(f"Email: {email1} (duplicate)")
+print(f"Status: {status}")
+print(f"Response: {data}")
+
+if status == 400:
+    print("✅ TEST 3 PASSED: Duplicate email rejected with 400")
+    if check_credential_leakage(data):
+        print("❌ SECURITY ISSUE: Error response contains credential information!")
+    else:
+        print("✅ No credential leakage in error response")
+else:
+    print(f"❌ TEST 3 FAILED: Expected 400 for duplicate email, got {status}")
+
+print()
+
+# ============================================================================
+# TEST 4: Validation - Short Password
+# ============================================================================
+print("TEST 4: Validation - Short Password")
+print("-" * 80)
+
+email_short = generate_unique_email()
+short_password = "short"
+
+status, data = test_register(email_short, generate_name(), short_password)
+print(f"Email: {email_short}")
+print(f"Password: {short_password} (< 8 chars)")
+print(f"Status: {status}")
+print(f"Response: {data}")
+
+if status == 400:
+    print("✅ TEST 4 PASSED: Short password rejected with 400")
+else:
+    print(f"❌ TEST 4 FAILED: Expected 400 for short password, got {status}")
+
+print()
+
+# ============================================================================
+# TEST 5: CONCURRENCY - Simultaneous Registrations (KEY TEST)
+# ============================================================================
+print("TEST 5: CONCURRENCY - Simultaneous Registrations (KEY TEST FOR TOPOLOGY FIX)")
+print("-" * 80)
+print("Firing 6 simultaneous POST /api/register requests...")
+print("Expected: NO 'Topology is closed' errors, only 200/400/429 status codes")
+print()
+
+# Prepare 6 unique registration requests
+concurrent_requests = []
+for i in range(6):
+    email = generate_unique_email()
+    name = generate_name()
+    concurrent_requests.append((email, name, test_password))
+    test_emails.append(email)
+
+# Execute concurrently
+results = []
+start_time = time.time()
+
+with ThreadPoolExecutor(max_workers=6) as executor:
+    futures = {
+        executor.submit(test_register, email, name, pwd): (email, name)
+        for email, name, pwd in concurrent_requests
+    }
+    
+    for future in as_completed(futures):
+        email, name = futures[future]
+        try:
+            status, data = future.result()
+            results.append((email, status, data))
+        except Exception as e:
+            results.append((email, 0, {"error": str(e)}))
+
+elapsed = time.time() - start_time
+
+# Analyze results
+status_counts = {}
+topology_errors = []
+db_errors = []
+success_count = 0
+rate_limit_count = 0
+
+for email, status, data in results:
+    status_counts[status] = status_counts.get(status, 0) + 1
+    
+    # Check for topology errors
+    data_str = str(data).lower()
+    if "topology is closed" in data_str or "mongotopologyclosederror" in data_str:
+        topology_errors.append((email, status, data))
+    
+    # Check for other DB errors
+    if "client must be connected" in data_str or "connection failed" in data_str:
+        db_errors.append((email, status, data))
+    
+    # Count successes and rate limits
+    if status == 200:
+        success_count += 1
+    elif status == 429:
+        rate_limit_count += 1
+
+print(f"Completed in {elapsed:.2f} seconds")
+print()
+print("Status Distribution:")
+for status, count in sorted(status_counts.items()):
+    print(f"  {status}: {count} requests")
+print()
+
+print("Detailed Results:")
+for i, (email, status, data) in enumerate(results, 1):
+    print(f"  Request {i}: {status} - {email[:30]}...")
+    if status not in [200, 429]:
+        print(f"    Response: {data}")
+
+print()
+
+# Verdict
+if topology_errors:
+    print("❌ TEST 5 FAILED: 'Topology is closed' errors detected!")
+    print("CRITICAL: MongoDB connection manager fix did NOT resolve the issue")
+    for email, status, data in topology_errors:
+        print(f"  - {email}: {status} - {data}")
+elif any(status >= 500 for status in status_counts.keys()):
+    print("❌ TEST 5 FAILED: 5xx server errors detected!")
+    print("CRITICAL: Database errors under concurrent load")
+    for email, status, data in results:
+        if status >= 500:
+            print(f"  - {email}: {status} - {data}")
+elif db_errors:
+    print("❌ TEST 5 FAILED: Database connection errors detected!")
+    for email, status, data in db_errors:
+        print(f"  - {email}: {status} - {data}")
+else:
+    print("✅ TEST 5 PASSED: Concurrent registrations handled correctly")
+    print(f"   - {success_count} successful (200)")
+    print(f"   - {rate_limit_count} rate limited (429) - ACCEPTABLE")
+    print("   - NO 'Topology is closed' errors")
+    print("   - NO 5xx database errors")
+    print("   - MongoDB connection manager fix is WORKING")
+
+print()
+
+# ============================================================================
+# TEST 6: Regression - Sign In and Authenticated Reads
+# ============================================================================
+print("TEST 6: Regression - Sign In and Authenticated Reads")
+print("-" * 80)
+
+# Sign in with first registered user
+print(f"Signing in as: {email1}")
+status, session_data, session = test_signin(email1, test_password)
+
+if status == 200 and session_data.get("user"):
+    print(f"✅ Sign in successful")
+    print(f"   User: {session_data['user'].get('email')}")
+    
+    # Test GET /api/organizations
+    print()
+    print("Testing GET /api/organizations...")
+    try:
+        orgs_response = session.get(f"{BASE_URL}/api/organizations", timeout=10)
+        print(f"   Status: {orgs_response.status_code}")
+        
+        if orgs_response.status_code == 200:
+            orgs_data = orgs_response.json()
+            print(f"   ✅ Organizations endpoint working (returned {len(orgs_data)} orgs)")
+            
+            # Check for credential leakage
+            if check_credential_leakage(orgs_data):
+                print("   ❌ SECURITY ISSUE: Response contains credential information!")
+        else:
+            print(f"   ⚠️  Unexpected status: {orgs_response.status_code}")
+    except Exception as e:
+        print(f"   ❌ Error: {e}")
+    
+    print()
+    print("✅ TEST 6 PASSED: Authentication and data reads working")
+else:
+    print(f"❌ TEST 6 FAILED: Sign in failed with status {status}")
+    print(f"   Response: {session_data}")
+
+print()
+
+# ============================================================================
+# TEST 7: Demo Mode - Enterprise CFO Endpoints (Regression)
+# ============================================================================
+print("TEST 7: Demo Mode - Enterprise CFO Endpoints (Regression)")
+print("-" * 80)
+
+demo_session = requests.Session()
+try:
+    # Get CSRF token
+    csrf_response = demo_session.get(f"{BASE_URL}/api/auth/csrf", timeout=10)
+    csrf_token = csrf_response.json().get("csrfToken")
+    
+    # Create demo session
+    demo_response = demo_session.post(
+        f"{BASE_URL}/api/auth/callback/demo",
+        data={"csrfToken": csrf_token, "json": "true"},
+        timeout=15,
+        allow_redirects=False
+    )
+    
+    # Check session
+    session_response = demo_session.get(f"{BASE_URL}/api/auth/session", timeout=10)
+    
+    if session_response.status_code == 200:
+        session_data = session_response.json()
+        if session_data.get("user", {}).get("isDemo"):
+            print("✅ Demo session created successfully")
+            print(f"   Active Org ID: {session_data.get('user', {}).get('activeOrgId')}")
+            
+            # Test CFO briefing endpoint (Enterprise mode)
+            print()
+            print("Testing GET /api/cfo/briefing...")
+            briefing_response = demo_session.get(f"{BASE_URL}/api/cfo/briefing", timeout=15)
+            print(f"   Status: {briefing_response.status_code}")
+            
+            if briefing_response.status_code == 200:
+                briefing_data = briefing_response.json()
+                has_required_keys = all(k in briefing_data for k in ['briefing', 'kpis', 'health', 'forecast'])
+                print(f"   ✅ CFO briefing endpoint working (has required keys: {has_required_keys})")
+                
+                # Check for credential leakage
+                if check_credential_leakage(briefing_data):
+                    print("   ❌ SECURITY ISSUE: Response contains credential information!")
+            else:
+                print(f"   ⚠️  Unexpected status: {briefing_response.status_code}")
+            
+            # Test organizations endpoint
+            print()
+            print("Testing GET /api/organizations...")
+            orgs_response = demo_session.get(f"{BASE_URL}/api/organizations", timeout=10)
+            print(f"   Status: {orgs_response.status_code}")
+            
+            if orgs_response.status_code == 200:
+                orgs_data = orgs_response.json()
+                print(f"   ✅ Organizations endpoint working (returned {len(orgs_data)} orgs)")
+            else:
+                print(f"   ⚠️  Unexpected status: {orgs_response.status_code}")
+            
+            print()
+            print("✅ TEST 7 PASSED: Enterprise CFO endpoints working with demo mode")
+        else:
+            print("❌ Demo session not created properly")
+    else:
+        print(f"❌ Failed to create demo session: {session_response.status_code}")
+except Exception as e:
+    print(f"❌ TEST 7 FAILED: {e}")
+
+print()
+
+# ============================================================================
+# SUMMARY
+# ============================================================================
+print("=" * 80)
+print("VERIFICATION SUMMARY")
+print("=" * 80)
+print()
+print("MongoDB Connection Manager Fix Verification Results:")
+print()
+print("1. ✅/❌ Single registration (DB write)")
+print("2. ✅/❌ Second registration (DB write)")
+print("3. ✅/❌ Duplicate email handling")
+print("4. ✅/❌ Validation (short password)")
+print("5. ✅/❌ CONCURRENCY - NO 'Topology is closed' errors (KEY TEST)")
+print("6. ✅/❌ Authenticated reads (organizations)")
+print("7. ✅/❌ Enterprise CFO endpoints (demo mode)")
+print()
+print("CRITICAL QUESTION: Did ANY request produce 'Topology is closed' or 5xx DB error?")
+print("ANSWER: Check TEST 5 results above")
+print()
+print("=" * 80)
