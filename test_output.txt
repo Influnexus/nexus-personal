@@ -1,0 +1,92 @@
+================================================================================
+SPRINT P1 VERIFICATION - ENTERPRISE REGRESSION + PERSONAL WORKSPACE
+================================================================================
+API URL: https://financial-health-hub-17.preview.emergentagent.com/api
+MongoDB: mongodb://localhost:27017/nexusai
+
+✅ MongoDB connection established
+
+================================================================================
+PART 1: ENTERPRISE REGRESSION (nothing should have changed)
+================================================================================
+
+[1/15] Demo mode - seeded data present
+✅ Demo session created: user=demo_697fd25e@nexusai.demo, org=None
+✅ TEST 1 PASSED: Demo has 260 seeded transactions
+
+[2/15] Finance endpoints - GET /api/cfo/briefing structure
+✅ TEST 2 PASSED: Briefing structure valid
+   - KPIs: cash=$34111.00, burnRate=$11812.00, runway=86d
+   - Health: score=17, band=at_risk, factors=5
+   - Forecast: 90 days, ending=$31117.00
+
+[3/15] AI CFO chat - POST /api/cfo/chat/stream SSE
+✅ TEST 3 PASSED: Chat streaming working, received 15 events including 'done'
+
+[4/15] CSV import - valid CSV with 2 rows
+✅ TEST 4 PASSED: CSV import successful, imported 2 rows
+   - csv_import event recorded in MongoDB
+
+[5/15] Invoice upload - invalid .txt file → 400 error
+✅ TEST 5 PASSED: Invalid file rejected with 400
+   - Error message: Unsupported file type "text/plain". Please upload a PDF, PNG or JPG.
+
+[6/15] Report generation - POST /api/cfo/report
+✅ TEST 6 PASSED: Report generated with markdown (3927 chars)
+
+[7/15] Billing - GET /api/billing/subscription
+✅ TEST 7 PASSED: Billing subscription endpoint working
+   - Status: none
+
+[8/15] Tenant isolation - User B cannot read User A's data
+✅ Demo session created: user=demo_fa678098@nexusai.demo, org=None
+✅ TEST 8 PASSED: Tenant isolation working
+   - User A org: da91e064-3dda-47b9-8e58-1bf24a428f62, transactions: 262
+   - User B org: e695d350-9850-4d8f-9d7b-d17a3b619bfb, transactions: 260
+
+================================================================================
+PART 2: SPRINT P1 ACCEPTANCE (new Personal workspace features)
+================================================================================
+
+[9/15] Personal workspace - unauthenticated → 401
+✅ TEST 9 PASSED: Unauthenticated request rejected with 401
+
+[10/15] Personal workspace - create and idempotency
+✅ User registered and logged in: p1test_go61b6f2@nexusai.com
+✅ TEST 10a PASSED: Personal workspace created
+   - Workspace ID: c2ac46aa-a709-49b3-a7f4-02538bf7e629
+   - Kind: personal
+   - Created: True
+✅ TEST 10b PASSED: Idempotency working (same workspace, created=false)
+✅ TEST 10c PASSED: GET /api/personal/workspace returns same workspace
+
+[11/15] Coexistence - user has BOTH business and personal orgs
+   - User has 1 membership(s)
+❌ TEST 11 FAILED: User has only 1 membership(s), expected 2+
+   - Org details: [("Test's Personal Finances", 'personal')]
+
+[12/15] Session workspaceKind - initially 'business'
+✅ TEST 12 PASSED: Session workspaceKind is 'None' (business)
+
+[13/15] Page protection - GET /personal
+✅ TEST 13a PASSED: Unauthenticated user redirected to /login
+✅ TEST 13b PASSED: Authenticated user sees page with 'personal-gate' testid
+
+[14/15] Mongo sanity - personal org has kind='personal' and OWNER membership
+✅ TEST 14a PASSED: Personal org has kind='personal'
+✅ TEST 14b PASSED: OWNER membership exists for personal org
+
+[15/15] Backward compatibility - demo org works regardless of kind
+   - Demo org kind: business
+✅ TEST 15 PASSED: Demo org CFO endpoints work (kind=business)
+
+================================================================================
+SPRINT P1 VERIFICATION COMPLETE
+================================================================================
+
+All 15 tests executed. Review results above for PASS/FAIL status.
+
+Key areas tested:
+  - Enterprise regression: Demo, Finance, Chat, CSV, Invoice, Report, Billing, Isolation
+  - Personal workspace: Creation, Idempotency, Coexistence, Session, Protection, Mongo
+================================================================================
