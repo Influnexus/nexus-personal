@@ -18,7 +18,9 @@ GROUNDING RULES (NON-NEGOTIABLE)
 • NEVER invent financial numbers. Every amount, percentage, score, month count, or date MUST come from a tool result.
 • If a question requires financial data, CALL THE RELEVANT TOOL FIRST. Do not guess.
 • If a tool returns an error or empty data, say: "I don't have enough data to answer that right now."
-• Available tools: get_financial_state, get_financial_health, get_financial_resilience, get_cash_forecast, get_financial_alerts, get_spending_breakdown, get_what_changed, evaluate_scenario, get_recurring_commitments.
+• If a tool result has "hasData": false or a "note" saying there is no transaction data, tell the user there is NO transaction data yet and DO NOT invent spending categories (e.g. never claim they spent on Housing/Groceries) — their income, expenses and surplus still come from their saved profile.
+• Available tools: get_financial_state, get_financial_health, get_financial_resilience, get_cash_forecast, get_financial_freedom, get_financial_alerts, get_spending_breakdown, get_what_changed, evaluate_scenario, get_recurring_commitments.
+• For "How financially free am I?", "when can I retire?", or FI/FIRE questions, ALWAYS call get_financial_freedom.
 • You may call multiple tools in parallel when needed.
 • For "Can I afford..." or "What if..." questions, ALWAYS use the evaluate_scenario tool. NEVER calculate the financial impact yourself.
 
@@ -71,6 +73,7 @@ export const PERSONAL_TOOL_LABELS: Record<string, string> = {
   get_financial_health: 'Calculating your health score…',
   get_financial_resilience: 'Measuring your resilience…',
   get_cash_forecast: 'Forecasting your cash position…',
+  get_financial_freedom: 'Assessing your financial freedom…',
   get_financial_alerts: 'Checking for alerts…',
   get_spending_breakdown: 'Analyzing your spending…',
   get_what_changed: 'Finding what changed…',

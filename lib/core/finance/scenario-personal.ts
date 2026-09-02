@@ -98,6 +98,11 @@ export interface PersonalScenarioInput {
   levers: PersonalScenarioLevers;
   profile?: { monthlyDebtPayment?: number };
   now?: Date;
+  // Canonical headline state (single source of truth). When provided, the baseline snapshot's
+  // cash/income/spending/surplus are rebased to these exact profile-derived values, and the same
+  // absolute lever-induced deltas are applied to the scenario — so Scenarios show the SAME numbers
+  // as Overview/Forecast/FI instead of a 30-day-window approximation.
+  baseState?: { cash: number; income30d: number; spend30d: number; surplus30d: number };
 }
 
 // ---- Verdict thresholds (exported, documented, deterministic) ----
@@ -412,11 +417,27 @@ export function evaluatePersonalScenario(input: PersonalScenarioInput): Personal
   const { txs, levers, profile, now } = input;
 
   // Baseline: current financial state
-  const baseline = computeSnapshot(txs, profile, now);
+  const rawBaseline = computeSnapshot(txs, profile, now);
 
   // Scenario: modified financial state
   const scenarioTxs = buildScenarioTransactions(txs, levers, now);
-  const scenario = computeSnapshot(scenarioTxs, profile, now);
+  const rawScenario = computeSnapshot(scenarioTxs, profile, now);
+
+  // Rebase headline numbers onto the canonical profile state (single source of truth), preserving
+  // the exact lever-induced deltas. Keeps resilience/health/projected consistent on both sides.
+  let baseline = rawBaseline;
+  let scenario = rawScenario;
+  if (input.baseState) {
+    const bs = input.baseState;
+    baseline = { ...rawBaseline, cash: bs.cash, monthlyIncome: bs.income30d, monthlySpending: bs.spend30d, monthlySurplus: bs.surplus30d };
+    scenario = {
+      ...rawScenario,
+      cash: bs.cash + (rawScenario.cash - rawBaseline.cash),
+      monthlyIncome: bs.income30d + (rawScenario.monthlyIncome - rawBaseline.monthlyIncome),
+      monthlySpending: bs.spend30d + (rawScenario.monthlySpending - rawBaseline.monthlySpending),
+      monthlySurplus: bs.surplus30d + (rawScenario.monthlySurplus - rawBaseline.monthlySurplus),
+    };
+  }
 
   // Delta
   const delta = computeDelta(baseline, scenario);

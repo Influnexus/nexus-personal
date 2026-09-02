@@ -99,6 +99,47 @@ export function computePersonalState(txs: TransactionLike[], now: Date = new Dat
   };
 }
 
+// ---- Canonical state from the authoritative PROFILE (single source of truth) ----
+// Used when the user has onboarded but has no REAL imported transactions. Headline monthly
+// figures come DIRECTLY from what the user entered (no 30-day-window sampling, no fabricated
+// spending analytics). Transaction-only fields (topCategories, recurring, trends) are empty.
+export interface ProfileStateInput {
+  monthlyIncome: number;
+  essentialMonthly: number;
+  discretionaryMonthly: number;
+  cash: number;
+  monthlyDebtPayment?: number;
+  sipMonthly?: number;
+}
+export function computePersonalStateFromProfile(p: ProfileStateInput): PersonalState {
+  const income = Math.max(0, p.monthlyIncome || 0);
+  const essential = Math.max(0, p.essentialMonthly || 0);
+  const discretionary = Math.max(0, p.discretionaryMonthly || 0);
+  const debt = Math.max(0, p.monthlyDebtPayment || 0);
+  const investing = Math.max(0, p.sipMonthly || 0);
+  const spend = essential + discretionary + debt; // spending excludes investments (savings)
+  const surplus = income - spend;
+  return {
+    cash: r0(p.cash || 0),
+    income30d: r0(income),
+    spend30d: r0(spend),
+    investing30d: r0(investing),
+    surplus30d: r0(surplus),
+    savingsRate: income > 0 ? r2(surplus / income) : 0,
+    essential30d: r0(essential),
+    discretionary30d: r0(discretionary),
+    other30d: r0(debt),
+    fixedMonthly: r0(essential + debt),
+    variableMonthly: r0(discretionary),
+    spendingTrendPct: 0,
+    incomeTrendPct: 0,
+    topCategories: [],        // no fabricated breakdown for profile-only users
+    recurringCommitments: [],
+    transactionCount: 0,
+  };
+}
+
+
 // ---- P2.5 Personal Financial Health (transparent factor model) ----
 export type PersonalHealthBand = 'thriving' | 'healthy' | 'stable' | 'strained' | 'at_risk';
 export type FactorStatus = 'strong' | 'moderate' | 'weak';

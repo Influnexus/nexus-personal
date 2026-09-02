@@ -7,6 +7,7 @@ import {
   computePersonalState, computePersonalHealth, computePersonalResilience,
   computeWhatChanged, computeExpenseBreakdown, forecastCash, computeAnomalies,
   computePersonalAlerts, getTopAlerts, detectRecurring, evaluatePersonalScenario,
+  computeFinancialFreedom,
   ESSENTIAL_CATEGORIES, SAVINGS_CATEGORIES,
   PersonalState, PersonalHealth, PersonalResilience,
 } from '@/lib/core/finance';
@@ -14,8 +15,16 @@ import type { TransactionLike } from '@/lib/core/finance';
 
 export interface PersonalToolContext {
   organizationId: string;
-  txs: TransactionLike[];
-  profile?: { monthlyDebtPayment?: number; currency?: string; goal?: string };
+  txs: TransactionLike[];              // base history feeding forecast/recurring/scenario engine
+  realTxs?: TransactionLike[];         // real imported transactions only (analytics)
+  hasTransactions?: boolean;           // whether real transaction analytics are available
+  state?: PersonalState;               // canonical headline state (from profile or real txs)
+  resilience?: PersonalResilience;     // precomputed canonical resilience
+  profile?: {
+    monthlyIncome?: number; essentialMonthly?: number; discretionaryMonthly?: number;
+    cash?: number; investments?: number; totalDebt?: number;
+    monthlyDebtPayment?: number; currency?: string; goal?: string;
+  };
   currency: string;
 }
 
@@ -34,9 +43,10 @@ export const PERSONAL_TOOLS: Record<string, PersonalRegisteredTool> = {
       },
     },
     handler: async (_args, ctx) => {
-      const state = computePersonalState(ctx.txs);
+      const state = ctx.state ?? computePersonalState(ctx.txs);
       return {
         metric: 'financial_state',
+        source: ctx.hasTransactions ? 'transactions' : 'profile',
         cash: state.cash,
         income30d: state.income30d,
         spend30d: state.spend30d,
@@ -64,7 +74,7 @@ export const PERSONAL_TOOLS: Record<string, PersonalRegisteredTool> = {
       },
     },
     handler: async (_args, ctx) => {
-      const state = computePersonalState(ctx.txs);
+      const state = ctx.state ?? computePersonalState(ctx.txs);
       const health = computePersonalHealth(state, ctx.profile);
       return {
         metric: 'financial_health',
@@ -86,7 +96,7 @@ export const PERSONAL_TOOLS: Record<string, PersonalRegisteredTool> = {
       },
     },
     handler: async (_args, ctx) => {
-      const resilience = computePersonalResilience(ctx.txs, { monthlyDebtPayment: ctx.profile?.monthlyDebtPayment });
+      const resilience = ctx.resilience ?? computePersonalResilience(ctx.txs, { monthlyDebtPayment: ctx.profile?.monthlyDebtPayment });
       return {
         metric: 'financial_resilience',
         value: resilience.resilienceMonths,
@@ -139,10 +149,11 @@ export const PERSONAL_TOOLS: Record<string, PersonalRegisteredTool> = {
       },
     },
     handler: async (_args, ctx) => {
-      const state = computePersonalState(ctx.txs);
-      const resilience = computePersonalResilience(ctx.txs, { monthlyDebtPayment: ctx.profile?.monthlyDebtPayment });
+      const state = ctx.state ?? computePersonalState(ctx.txs);
+      const resilience = ctx.resilience ?? computePersonalResilience(ctx.txs, { monthlyDebtPayment: ctx.profile?.monthlyDebtPayment });
       const forecast = ctx.txs.length >= 3 ? forecastCash(ctx.txs, [], 90) : null;
-      const anomalies = ctx.txs.length >= 4 ? computeAnomalies(ctx.txs) : [];
+      const analyticsTxs = ctx.realTxs ?? ctx.txs;
+      const anomalies = ctx.hasTransactions && analyticsTxs.length >= 4 ? computeAnomalies(analyticsTxs) : [];
       const alerts = computePersonalAlerts({ state, resilience, forecast, anomalies, currency: ctx.currency });
       return {
         metric: 'financial_alerts',
@@ -162,10 +173,15 @@ export const PERSONAL_TOOLS: Record<string, PersonalRegisteredTool> = {
       },
     },
     handler: async (_args, ctx) => {
-      const filtered = ctx.txs.filter(t => !SAVINGS_CATEGORIES.includes(t.category));
+      if (!ctx.hasTransactions) {
+        return { metric: 'spending_breakdown', hasData: false, categories: [], currency: ctx.currency,
+          note: 'No transaction data yet. Spending-by-category analysis unlocks when the user imports real transactions. Do NOT invent categories.' };
+      }
+      const filtered = (ctx.realTxs ?? ctx.txs).filter(t => !SAVINGS_CATEGORIES.includes(t.category));
       const breakdown = computeExpenseBreakdown(filtered, 30);
       return {
         metric: 'spending_breakdown',
+        hasData: true,
         categories: breakdown.map(c => ({ category: c.category, amount: c.amount, share: Math.round(c.share * 100) })),
         currency: ctx.currency,
       };
@@ -182,9 +198,14 @@ export const PERSONAL_TOOLS: Record<string, PersonalRegisteredTool> = {
       },
     },
     handler: async (_args, ctx) => {
-      const changes = computeWhatChanged(ctx.txs);
+      if (!ctx.hasTransactions) {
+        return { metric: 'what_changed', hasData: false, changes: [], currency: ctx.currency,
+          note: 'No transaction data yet — cannot compute month-over-month changes. Do NOT fabricate spending changes.' };
+      }
+      const changes = computeWhatChanged(ctx.realTxs ?? ctx.txs);
       return {
         metric: 'what_changed',
+        hasData: true,
         changes: changes.map(c => ({ kind: c.kind, direction: c.direction, tone: c.tone, pct: c.pct, amount: c.amount, category: c.category, detail: c.detail })),
         currency: ctx.currency,
       };
@@ -221,7 +242,7 @@ export const PERSONAL_TOOLS: Record<string, PersonalRegisteredTool> = {
       if (args.newRecurringExpenseAmount) levers.newRecurringExpense = { amount: args.newRecurringExpenseAmount, label: args.newRecurringExpenseLabel || 'New expense' };
       if (args.additionalSavings) levers.additionalSavings = args.additionalSavings;
 
-      const result = evaluatePersonalScenario({ txs: ctx.txs, levers, profile: ctx.profile });
+      const result = evaluatePersonalScenario({ txs: ctx.txs, levers, profile: ctx.profile, baseState: ctx.state ? { cash: ctx.state.cash, income30d: ctx.state.income30d, spend30d: ctx.state.spend30d, surplus30d: ctx.state.surplus30d } : undefined });
       return {
         metric: 'scenario_evaluation',
         verdict: result.verdict,
@@ -243,10 +264,16 @@ export const PERSONAL_TOOLS: Record<string, PersonalRegisteredTool> = {
       },
     },
     handler: async (_args, ctx) => {
-      const recurring = detectRecurring(ctx.txs);
-      const catOf = (vendor: string) => ctx.txs.find(t => t.vendor === vendor)?.category || 'Other';
+      if (!ctx.hasTransactions) {
+        return { metric: 'recurring_commitments', hasData: false, patterns: [], currency: ctx.currency,
+          note: 'No transaction data yet — recurring bills are detected from real transactions. Do NOT invent recurring commitments.' };
+      }
+      const src = ctx.realTxs ?? ctx.txs;
+      const recurring = detectRecurring(src);
+      const catOf = (vendor: string) => src.find(t => t.vendor === vendor)?.category || 'Other';
       return {
         metric: 'recurring_commitments',
+        hasData: true,
         patterns: recurring.map(r => ({
           vendor: r.vendor,
           category: catOf(r.vendor),
@@ -256,6 +283,51 @@ export const PERSONAL_TOOLS: Record<string, PersonalRegisteredTool> = {
           monthlyEquivalent: Math.round(r.avgAmount * (30 / r.cadenceDays)),
         })).sort((a, b) => b.monthlyEquivalent - a.monthlyEquivalent),
         currency: ctx.currency,
+      };
+    },
+  },
+
+  get_financial_freedom: {
+    spec: {
+      type: 'function',
+      function: {
+        name: 'get_financial_freedom',
+        description: 'Get the Financial Freedom / Financial Independence (FI) assessment: current financial assets, FI target (25x annual essential expenses by default), progress %, remaining gap, monthly surplus, savings rate, estimated trajectory, factors helping/slowing progress, and highest-impact next actions. Use for "How financially free am I?", "When can I retire?", FI/FIRE questions.',
+        parameters: { type: 'object', properties: {}, additionalProperties: false },
+      },
+    },
+    handler: async (_args, ctx) => {
+      const state = ctx.state ?? computePersonalState(ctx.txs);
+      const fi = computeFinancialFreedom({
+        essentialMonthly: state.essential30d,
+        monthlySurplus: state.surplus30d,
+        monthlyIncome: state.income30d,
+        cash: state.cash,
+        investments: ctx.profile?.investments ?? 0,
+        discretionaryMonthly: state.discretionary30d,
+        monthlyDebtPayment: ctx.profile?.monthlyDebtPayment ?? 0,
+        currency: ctx.currency,
+      });
+      return {
+        metric: 'financial_freedom',
+        currentAssets: fi.currentAssets,
+        fiTarget: fi.fiTarget,
+        fiProgressPct: fi.fiProgressPct,
+        fiGap: fi.fiGap,
+        essentialMonthly: fi.essentialMonthly,
+        essentialAnnual: fi.essentialAnnual,
+        monthlySurplus: fi.monthlySurplus,
+        savingsRate: fi.savingsRate,
+        monthsToFI: fi.monthsToFI,
+        yearsToFI: fi.yearsToFI,
+        status: fi.status,
+        helping: fi.helping,
+        slowing: fi.slowing,
+        nextActions: fi.nextActions,
+        multiplier: fi.multiplier,
+        assumptionNote: fi.assumptionNote,
+        disclaimer: fi.disclaimer,
+        currency: fi.currency,
       };
     },
   },

@@ -21,6 +21,7 @@ import {
 const NAV_LINKS = [
   { href: '/personal', label: 'Overview' },
   { href: '/personal/forecast', label: 'Forecast' },
+  { href: '/personal/financial-freedom', label: 'Freedom' },
   { href: '/personal/scenarios', label: 'Scenarios' },
   { href: '/personal/chat', label: 'Ask Nexus' },
   { href: '/personal/alerts', label: 'Alerts' },

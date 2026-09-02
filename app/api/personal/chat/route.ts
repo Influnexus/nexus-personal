@@ -34,16 +34,8 @@ export async function POST(req: NextRequest) {
     }), { headers: { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache' } });
   }
 
-  // Pre-fetch transactions and profile once for all tool calls in this request
-  const txs = await transactionsRepo.listByOrg(ws.id);
-  const profile = ws.personalProfile;
-  const currency = profile?.currency || txs[0]?.currency || 'INR';
-  const toolCtx: PersonalToolContext = {
-    organizationId: ws.id,
-    txs,
-    profile: { monthlyDebtPayment: profile?.monthlyDebtPayment, currency, goal: profile?.goal },
-    currency,
-  };
+  // Build the canonical, profile-grounded tool context once (single source of truth).
+  const toolCtx: PersonalToolContext = await personalService.buildToolContext(ws);
 
   // Privacy-safe analytics
   trackServer('personal_chat_question', { userId: session.user.id, organizationId: ws.id, isDemo: !!ws.isDemo });

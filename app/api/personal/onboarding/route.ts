@@ -7,9 +7,7 @@ import { z } from 'zod';
 import { v4 as uuid } from 'uuid';
 import { orgsRepo } from '@/lib/repositories/organizations';
 import { membershipsRepo } from '@/lib/repositories/memberships';
-import { transactionsRepo } from '@/lib/repositories/transactions';
 import { personalService } from '@/lib/services/personal.service';
-import { personalSeedService } from '@/lib/services/personal-seed.service';
 import { trackServer } from '@/lib/analytics/track-server';
 import { rateLimit } from '@/lib/rate-limit';
 
@@ -32,7 +30,8 @@ export async function GET() {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const ws = await personalService.findWorkspaceForUser(session.user.id);
-  return NextResponse.json({ workspace: ws ? { id: ws.id, name: ws.name } : null, profile: ws?.personalProfile ?? null });
+  const summary = ws ? await personalService.getOnboardingSummary(ws) : null;
+  return NextResponse.json({ workspace: ws ? { id: ws.id, name: ws.name } : null, profile: ws?.personalProfile ?? null, summary });
 }
 
 export async function POST(req: NextRequest) {
@@ -63,13 +62,12 @@ export async function POST(req: NextRequest) {
   const profile = { ...parsed.data, goal: parsed.data.goal || null, updatedAt: new Date() };
   await orgsRepo.update(ws.id, { personalProfile: profile } as any);
 
-  // Seed a deterministic history ONLY for a fresh workspace — never overwrite user data.
-  const existing = await transactionsRepo.listByOrg(ws.id);
-  let seeded = 0;
-  if (existing.length === 0) {
-    seeded = await personalSeedService.seedFromProfile(ws.id, profile as any, { demo: false });
-  }
+  // NO fabricated transactions for real users. Analytics stay empty until the user imports real
+  // transactions; all headline metrics/forecast/FI derive deterministically from this profile.
+  // Re-fetch the saved workspace and recompute metrics so the client can show a confirmation.
+  const saved = await orgsRepo.findById(ws.id);
+  const summary = saved ? await personalService.getOnboardingSummary(saved as any) : null;
 
   trackServer('personal_onboarding_completed', { userId: session.user.id, organizationId: ws.id, isDemo: session.user.isDemo });
-  return NextResponse.json({ ok: true, workspaceId: ws.id, seeded });
+  return NextResponse.json({ ok: true, workspaceId: ws.id, summary });
 }

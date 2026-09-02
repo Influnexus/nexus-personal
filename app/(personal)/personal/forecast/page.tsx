@@ -215,6 +215,48 @@ export default function PersonalForecastPage() {
         </Card>
       </div>
 
+      {/* Profile-grounded projections + sensitivities (work even with zero transactions) */}
+      {data.metrics && (
+        <Card data-testid="forecast-projections">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Where your money is heading</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-sm">
+              <div><div className="text-xs text-muted-foreground">Monthly income</div><div className="font-semibold tabular-nums">{formatCompact(data.metrics.monthlyIncome, currency)}</div></div>
+              <div><div className="text-xs text-muted-foreground">Monthly expenses</div><div className="font-semibold tabular-nums">{formatCompact(data.metrics.monthlyExpenses, currency)}</div></div>
+              <div><div className="text-xs text-muted-foreground">Monthly surplus</div><div className="font-semibold tabular-nums">{formatCompact(data.metrics.monthlySurplus, currency)}</div></div>
+              <div><div className="text-xs text-muted-foreground">Savings rate</div><div className="font-semibold tabular-nums">{Math.round((data.metrics.savingsRate || 0) * 100)}%</div></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 border-t border-border pt-3 text-sm">
+              <div><div className="text-xs text-muted-foreground">Current cash</div><div className="font-semibold tabular-nums">{formatCompact(data.projections.startingCash, currency)}</div></div>
+              <div><div className="text-xs text-muted-foreground">In 30 days</div><div className="font-semibold tabular-nums">{formatCompact(data.projections.day30, currency)}</div></div>
+              <div><div className="text-xs text-muted-foreground">In 60 days</div><div className="font-semibold tabular-nums">{formatCompact(data.projections.day60, currency)}</div></div>
+              <div><div className="text-xs text-muted-foreground">In 90 days</div><div className="font-semibold tabular-nums">{formatCompact(data.projections.day90, currency)}</div></div>
+            </div>
+            {data.sensitivities?.length > 0 && (
+              <div className="border-t border-border pt-3">
+                <div className="mb-2 text-xs font-medium text-muted-foreground">Sensitivity — 90-day cash under different conditions</div>
+                <div className="space-y-1.5">
+                  {data.sensitivities.map((sv: any) => (
+                    <div key={sv.key} className="flex items-center justify-between text-sm">
+                      <span>{sv.label}</span>
+                      <span className="tabular-nums text-muted-foreground">{formatCompact(sv.day90, currency)} <span className="text-xs">({formatCompact(sv.monthlySurplus, currency)}/mo)</span></span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {data.assumptions?.length > 0 && (
+              <ul className="list-disc space-y-0.5 border-t border-border pt-3 pl-4 text-[11px] text-muted-foreground">
+                {data.assumptions.map((a: string, i: number) => <li key={i}>{a}</li>)}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+
       {/* Cash position chart */}
       <Card data-testid="forecast-chart">
         <CardHeader className="pb-2">

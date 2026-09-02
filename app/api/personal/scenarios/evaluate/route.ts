@@ -17,13 +17,14 @@ export async function POST(req: Request) {
     const body = await req.json();
     const levers: PersonalScenarioLevers = body.levers || {};
 
-    const txs = await transactionsRepo.listByOrg(ws.id);
-    const profile = ws.personalProfile;
+    // Canonical base history + profile (single source of truth; works with zero real transactions).
+    const ctx = await personalService.buildToolContext(ws);
 
     const result = evaluatePersonalScenario({
-      txs,
+      txs: ctx.txs,
       levers,
-      profile: { monthlyDebtPayment: profile?.monthlyDebtPayment },
+      profile: { monthlyDebtPayment: ctx.profile?.monthlyDebtPayment },
+      baseState: ctx.state ? { cash: ctx.state.cash, income30d: ctx.state.income30d, spend30d: ctx.state.spend30d, surplus30d: ctx.state.surplus30d } : undefined,
     });
 
     // Privacy-safe analytics — no financial values

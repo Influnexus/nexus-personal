@@ -118,7 +118,12 @@ export default async function PersonalDashboardPage() {
       <section data-testid="personal-money-goes">
         <h2 className="text-sm font-semibold text-muted-foreground">Where your money goes <span className="font-normal">· last 30 days</span></h2>
         <div className="mt-2 space-y-2.5 rounded-2xl border border-border bg-card p-4">
-          {s.topCategories.length === 0 && <p className="text-sm text-muted-foreground">No spending recorded yet.</p>}
+          {s.topCategories.length === 0 && (
+            <div className="rounded-lg bg-muted/40 p-3 text-sm text-muted-foreground" data-testid="personal-no-transactions">
+              <p className="font-medium text-foreground">No transaction data yet</p>
+              <p className="mt-0.5">Import or add transactions to unlock spending-by-category analysis. Your income, expenses and surplus below come from your saved profile.</p>
+            </div>
+          )}
           {s.topCategories.map((c: any) => (
             <div key={c.category}>
               <div className="flex items-baseline justify-between text-sm">
@@ -135,6 +140,7 @@ export default async function PersonalDashboardPage() {
             <span>Lifestyle: <b className="text-foreground">{fmtMoney(s.discretionary30d, cur)}</b></span>
             <span>Fixed bills: <b className="text-foreground">{fmtMoney(s.fixedMonthly, cur)}/mo</b></span>
             {s.investing30d > 0 && <span>Invested: <b className="text-foreground">{fmtMoney(s.investing30d, cur)}</b></span>}
+            <a href="/personal/onboarding?edit=1" className="ml-auto text-foreground underline underline-offset-2" data-testid="personal-edit-financials">Edit financial info</a>
           </div>
         </div>
       </section>

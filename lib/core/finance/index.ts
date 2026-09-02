@@ -11,3 +11,4 @@ export * from './resilience';
 export * from './personal';
 export * from './alerts';
 export * from './scenario-personal';
+export * from './financial-freedom';
