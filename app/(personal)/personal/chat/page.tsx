@@ -68,7 +68,11 @@ export default function PersonalChatPage() {
       });
 
       if (!res.ok) {
-        throw new Error(res.status === 401 ? 'Please sign in again.' : 'Failed to get response.');
+        throw new Error(
+          res.status === 401 ? 'Please sign in again.'
+          : res.status === 429 ? "You're sending messages a little too fast. Please wait a few seconds and try again."
+          : 'Failed to get response.'
+        );
       }
 
       const reader = res.body?.getReader();
@@ -108,8 +112,13 @@ export default function PersonalChatPage() {
               setToolStatus(data.label);
               if (data.name) toolsUsed.push(data.name);
             } else if (data.code) {
-              // Error
-              setError(data.message || 'Something went wrong.');
+              // Error event (e.g. rate_limited, ai_unavailable) — show a clear, friendly message.
+              const friendly = data.code === 'rate_limited'
+                ? "You're sending messages a little too fast. Please wait a few seconds and try again."
+                : data.code === 'ai_unavailable'
+                ? 'Nexus is briefly unavailable. Please try again in a moment.'
+                : (data.message || 'Something went wrong. Please try again.');
+              setError(friendly);
               setMessages(prev => prev.filter(m => m.id !== assistantMsg.id));
             }
           } catch {

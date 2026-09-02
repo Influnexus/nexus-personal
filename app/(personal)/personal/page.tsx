@@ -151,18 +151,18 @@ export default async function PersonalDashboardPage() {
         <div className="mt-2 grid grid-cols-3 gap-3">
           <div className="rounded-2xl border border-border bg-card p-4">
             <p className="text-xs text-muted-foreground">Cash &amp; savings</p>
-            <p className="mt-1 text-xl font-bold tabular-nums">{fmtMoneyCompact(o.position.cash, cur)}</p>
+            <p className="mt-1 text-xl font-bold tabular-nums">{fmtMoney(o.position.cash, cur)}</p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4">
             <p className="text-xs text-muted-foreground">Investments</p>
-            <p className="mt-1 text-xl font-bold tabular-nums">{fmtMoneyCompact(o.position.investments, cur)}</p>
+            <p className="mt-1 text-xl font-bold tabular-nums">{fmtMoney(o.position.investments, cur)}</p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4">
             <p className="text-xs text-muted-foreground">Debt</p>
-            <p className="mt-1 text-xl font-bold tabular-nums">{o.position.totalDebt > 0 ? fmtMoneyCompact(o.position.totalDebt, cur) : '—'}</p>
+            <p className="mt-1 text-xl font-bold tabular-nums">{o.position.totalDebt > 0 ? fmtMoney(o.position.totalDebt, cur) : '—'}</p>
           </div>
         </div>
-        <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground"><TrendingUp className="h-3 w-3" /> Net position: <b className="text-foreground">{fmtMoneyCompact(o.position.netWorth, cur)}</b></p>
+        <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground"><TrendingUp className="h-3 w-3" /> Net position: <b className="text-foreground">{fmtMoney(o.position.netWorth, cur)}</b></p>
       </section>
 
       {/* CTAs */}
