@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
 import { track } from '@/lib/analytics/client';
+import { useT } from '@/components/personal/i18n-provider';
 
 // ---- Types ----
 interface ScenarioSnapshot {
@@ -95,6 +96,7 @@ function CompareCard({ label, icon: Icon, baseline, scenario, delta, format, suf
 
 // ---- Main Component ----
 export default function PersonalScenariosPage() {
+  const t = useT();
   const [input, setInput] = useState('');
   const [parsing, setParsing] = useState(false);
   const [evaluating, setEvaluating] = useState(false);
@@ -135,11 +137,11 @@ export default function PersonalScenariosPage() {
         }
       }
     } catch (e: any) {
-      setError(e.message || 'Failed to parse scenario');
+      setError(e.message || t('scenarios.errParse'));
     } finally {
       setParsing(false);
     }
-  }, [input]);
+  }, [input, t]);
 
   // Evaluate scenario
   const handleEvaluate = useCallback(async (levers: any) => {
@@ -168,13 +170,13 @@ export default function PersonalScenariosPage() {
       setMode('result');
       track('personal_scenario_completed');
       // Add to history (max 3)
-      setHistory(prev => [{ input: input || 'Manual scenario', result: data }, ...prev].slice(0, 3));
+      setHistory(prev => [{ input: input || t('scenarios.manualScenario'), result: data }, ...prev].slice(0, 3));
     } catch (e: any) {
-      setError(e.message || 'Failed to evaluate scenario');
+      setError(e.message || t('scenarios.errEval'));
     } finally {
       setEvaluating(false);
     }
-  }, [input]);
+  }, [input, t]);
 
   // Evaluate from sliders
   const handleSliderEvaluate = useCallback(async () => {
@@ -183,7 +185,7 @@ export default function PersonalScenariosPage() {
     if (sliderLevers.essentialChangePct !== 0) levers.essentialChangePct = sliderLevers.essentialChangePct;
     if (sliderLevers.discretionaryChangePct !== 0) levers.discretionaryChangePct = sliderLevers.discretionaryChangePct;
     if (sliderLevers.oneTimePurchase > 0) levers.oneTimePurchase = { amount: sliderLevers.oneTimePurchase };
-    if (sliderLevers.newRecurringExpense > 0) levers.newRecurringExpense = { amount: sliderLevers.newRecurringExpense, label: 'New expense' };
+    if (sliderLevers.newRecurringExpense > 0) levers.newRecurringExpense = { amount: sliderLevers.newRecurringExpense, label: t('scenarios.newExpenseLabel') };
     if (sliderLevers.additionalSavings > 0) levers.additionalSavings = sliderLevers.additionalSavings;
     setParsedLevers(levers);
     await handleEvaluate(levers);
@@ -204,15 +206,15 @@ export default function PersonalScenariosPage() {
     <div className="space-y-6 pt-8" data-testid="personal-scenarios-page">
       <div className="flex items-center gap-2">
         <Link href="/personal" className="text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" /></Link>
-        <h1 className="text-xl font-bold">Decision Simulator</h1>
+        <h1 className="text-xl font-bold">{t('scenarios.title')}</h1>
       </div>
 
       {/* Mode: Input */}
       {mode === 'input' && (
         <div className="space-y-6">
           <div className="text-center py-6">
-            <h2 className="text-2xl font-bold tracking-tight">What&apos;s on your mind?</h2>
-            <p className="mt-2 text-muted-foreground">Describe a financial decision and see its impact before you commit.</p>
+            <h2 className="text-2xl font-bold tracking-tight">{t('scenarios.whatsOnMind')}</h2>
+            <p className="mt-2 text-muted-foreground">{t('scenarios.describe')}</p>
           </div>
 
           {/* Natural language input */}
@@ -223,20 +225,20 @@ export default function PersonalScenariosPage() {
                   ref={inputRef}
                   value={input}
                   onChange={e => setInput(e.target.value)}
-                  placeholder="e.g., Buy a ₹2 lakh laptop"
+                  placeholder={t('scenarios.inputPlaceholder')}
                   className="flex-1 text-base"
                   onKeyDown={e => e.key === 'Enter' && handleParse()}
                   data-testid="scenario-input"
                 />
                 <Button onClick={handleParse} disabled={parsing || !input.trim()} data-testid="scenario-submit">
                   {parsing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                  <span className="ml-1.5">{parsing ? 'Analyzing...' : 'Simulate'}</span>
+                  <span className="ml-1.5">{parsing ? t('scenarios.analyzing') : t('scenarios.simulate')}</span>
                 </Button>
               </div>
               <div className="mt-3 flex flex-wrap gap-1.5">
-                {['Buy a ₹2 lakh laptop', 'Move to ₹60K rent', 'Take 3 months off work', 'Start ₹15K EMI'].map(ex => (
-                  <button key={ex} onClick={() => { setInput(ex); }} className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground hover:bg-accent transition-colors">
-                    {ex}
+                {['scenarios.ex1', 'scenarios.ex2', 'scenarios.ex3', 'scenarios.ex4'].map(exKey => (
+                  <button key={exKey} onClick={() => { setInput(t(exKey)); }} className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground hover:bg-accent transition-colors">
+                    {t(exKey)}
                   </button>
                 ))}
               </div>
@@ -247,7 +249,7 @@ export default function PersonalScenariosPage() {
           {parsedLevers?.ambiguous && (
             <Card className="border-amber-500/30">
               <CardContent className="p-4">
-                <p className="text-sm font-medium text-amber-700 dark:text-amber-400">Need more details</p>
+                <p className="text-sm font-medium text-amber-700 dark:text-amber-400">{t('scenarios.needDetails')}</p>
                 <p className="mt-1 text-sm text-muted-foreground">{parsedLevers.clarificationNeeded}</p>
               </CardContent>
             </Card>
@@ -256,13 +258,13 @@ export default function PersonalScenariosPage() {
           {/* Divider */}
           <div className="flex items-center gap-3">
             <div className="h-px flex-1 bg-border" />
-            <span className="text-xs text-muted-foreground">or use manual controls</span>
+            <span className="text-xs text-muted-foreground">{t('scenarios.orManual')}</span>
             <div className="h-px flex-1 bg-border" />
           </div>
 
           {/* Sliders */}
           <Button variant="outline" className="w-full" onClick={() => setMode('sliders')} data-testid="open-sliders">
-            <SlidersHorizontal className="mr-1.5 h-4 w-4" /> Manual Scenario Builder
+            <SlidersHorizontal className="mr-1.5 h-4 w-4" /> {t('scenarios.manualBuilder')}
           </Button>
 
           {error && <p className="text-sm text-red-500 text-center">{error}</p>}
@@ -270,7 +272,7 @@ export default function PersonalScenariosPage() {
           {/* History */}
           {history.length > 0 && (
             <section>
-              <h3 className="text-sm font-semibold text-muted-foreground mb-2">Recent scenarios</h3>
+              <h3 className="text-sm font-semibold text-muted-foreground mb-2">{t('scenarios.recent')}</h3>
               <div className="space-y-1.5">
                 {history.map((h, i) => (
                   <button key={i} onClick={() => { setResult(h.result); setMode('result'); }}
@@ -290,46 +292,46 @@ export default function PersonalScenariosPage() {
         <div className="space-y-5">
           <Card data-testid="scenario-sliders">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Scenario Builder</CardTitle>
+              <CardTitle className="text-sm">{t('scenarios.builderTitle')}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-5">
               <div>
-                <div className="flex justify-between text-sm mb-1"><span>Income change</span><span className="font-mono">{sliderLevers.incomeChangePct > 0 ? '+' : ''}{sliderLevers.incomeChangePct}%</span></div>
+                <div className="flex justify-between text-sm mb-1"><span>{t('scenarios.incomeChange')}</span><span className="font-mono">{sliderLevers.incomeChangePct > 0 ? '+' : ''}{sliderLevers.incomeChangePct}%</span></div>
                 <Slider value={[sliderLevers.incomeChangePct]} min={-100} max={100} step={5}
                   onValueChange={([v]) => setSliderLevers(p => ({ ...p, incomeChangePct: v }))} />
               </div>
               <div>
-                <div className="flex justify-between text-sm mb-1"><span>Essential spending</span><span className="font-mono">{sliderLevers.essentialChangePct > 0 ? '+' : ''}{sliderLevers.essentialChangePct}%</span></div>
+                <div className="flex justify-between text-sm mb-1"><span>{t('scenarios.essentialSpending')}</span><span className="font-mono">{sliderLevers.essentialChangePct > 0 ? '+' : ''}{sliderLevers.essentialChangePct}%</span></div>
                 <Slider value={[sliderLevers.essentialChangePct]} min={-50} max={100} step={5}
                   onValueChange={([v]) => setSliderLevers(p => ({ ...p, essentialChangePct: v }))} />
               </div>
               <div>
-                <div className="flex justify-between text-sm mb-1"><span>Lifestyle spending</span><span className="font-mono">{sliderLevers.discretionaryChangePct > 0 ? '+' : ''}{sliderLevers.discretionaryChangePct}%</span></div>
+                <div className="flex justify-between text-sm mb-1"><span>{t('scenarios.lifestyleSpending')}</span><span className="font-mono">{sliderLevers.discretionaryChangePct > 0 ? '+' : ''}{sliderLevers.discretionaryChangePct}%</span></div>
                 <Slider value={[sliderLevers.discretionaryChangePct]} min={-100} max={100} step={5}
                   onValueChange={([v]) => setSliderLevers(p => ({ ...p, discretionaryChangePct: v }))} />
               </div>
               <div>
-                <div className="flex justify-between text-sm mb-1"><span>One-time purchase</span><span className="font-mono">{fmt(sliderLevers.oneTimePurchase)}</span></div>
+                <div className="flex justify-between text-sm mb-1"><span>{t('scenarios.oneTime')}</span><span className="font-mono">{fmt(sliderLevers.oneTimePurchase)}</span></div>
                 <Slider value={[sliderLevers.oneTimePurchase]} min={0} max={1000000} step={10000}
                   onValueChange={([v]) => setSliderLevers(p => ({ ...p, oneTimePurchase: v }))} />
               </div>
               <div>
-                <div className="flex justify-between text-sm mb-1"><span>New monthly expense</span><span className="font-mono">{fmt(sliderLevers.newRecurringExpense)}/mo</span></div>
+                <div className="flex justify-between text-sm mb-1"><span>{t('scenarios.newMonthly')}</span><span className="font-mono">{t('unit.perMo', { value: fmt(sliderLevers.newRecurringExpense) })}</span></div>
                 <Slider value={[sliderLevers.newRecurringExpense]} min={0} max={100000} step={1000}
                   onValueChange={([v]) => setSliderLevers(p => ({ ...p, newRecurringExpense: v }))} />
               </div>
               <div>
-                <div className="flex justify-between text-sm mb-1"><span>Additional monthly savings</span><span className="font-mono">{fmt(sliderLevers.additionalSavings)}/mo</span></div>
+                <div className="flex justify-between text-sm mb-1"><span>{t('scenarios.addlSavings')}</span><span className="font-mono">{t('unit.perMo', { value: fmt(sliderLevers.additionalSavings) })}</span></div>
                 <Slider value={[sliderLevers.additionalSavings]} min={0} max={100000} step={1000}
                   onValueChange={([v]) => setSliderLevers(p => ({ ...p, additionalSavings: v }))} />
               </div>
             </CardContent>
           </Card>
           <div className="flex gap-2">
-            <Button variant="outline" className="flex-1" onClick={() => setMode('input')}><ArrowLeft className="mr-1.5 h-3.5 w-3.5" /> Back</Button>
+            <Button variant="outline" className="flex-1" onClick={() => setMode('input')}><ArrowLeft className="mr-1.5 h-3.5 w-3.5" /> {t('common.back')}</Button>
             <Button className="flex-1" onClick={handleSliderEvaluate} disabled={evaluating} data-testid="slider-evaluate">
               {evaluating ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Sparkles className="mr-1.5 h-4 w-4" />}
-              Evaluate
+              {t('scenarios.evaluate')}
             </Button>
           </div>
         </div>
@@ -358,18 +360,18 @@ export default function PersonalScenariosPage() {
 
           {/* Before vs After comparison */}
           <div>
-            <h3 className="text-sm font-semibold text-muted-foreground mb-2">Current vs After Decision</h3>
+            <h3 className="text-sm font-semibold text-muted-foreground mb-2">{t('scenarios.currentVsAfter')}</h3>
             <div className="grid gap-2 sm:grid-cols-2" data-testid="scenario-comparison">
-              <CompareCard label="Financial Health" icon={Heart}
+              <CompareCard label={t('scenarios.health')} icon={Heart}
                 baseline={result.baseline.healthScore} scenario={result.scenario.healthScore}
                 delta={result.delta.health} format={(v: number) => `${v}/100`} suffix=" pts" />
-              <CompareCard label="Financial Resilience" icon={Shield}
+              <CompareCard label={t('scenarios.resilience')} icon={Shield}
                 baseline={result.baseline.resilienceMonths} scenario={result.scenario.resilienceMonths}
-                delta={result.delta.resilience} format={(v: number) => `${v} mo`} suffix=" mo" />
-              <CompareCard label="90-Day Cash" icon={TrendingUp}
+                delta={result.delta.resilience} format={(v: number) => `${v} ${t('forecast.mo')}`} suffix={` ${t('forecast.mo')}`} />
+              <CompareCard label={t('scenarios.cash90')} icon={TrendingUp}
                 baseline={result.baseline.projected90dCash} scenario={result.scenario.projected90dCash}
                 delta={result.delta.projected90dCash} format={(v: number) => fmtCompact(v, currency)} />
-              <CompareCard label="Monthly Surplus" icon={Wallet}
+              <CompareCard label={t('scenarios.surplus')} icon={Wallet}
                 baseline={result.baseline.monthlySurplus} scenario={result.scenario.monthlySurplus}
                 delta={result.delta.surplus} format={(v: number) => fmt(v, currency)} />
             </div>
@@ -380,7 +382,7 @@ export default function PersonalScenariosPage() {
             <section data-testid="scenario-alternatives">
               <div className="flex items-center gap-1.5 mb-2">
                 <Lightbulb className="h-4 w-4 text-amber-500" />
-                <h3 className="text-sm font-semibold text-muted-foreground">What would make this safer?</h3>
+                <h3 className="text-sm font-semibold text-muted-foreground">{t('scenarios.makeSafer')}</h3>
               </div>
               <div className="space-y-2">
                 {result.alternatives.map(alt => (
@@ -398,9 +400,9 @@ export default function PersonalScenariosPage() {
                       </div>
                     </div>
                     <div className="mt-2 flex gap-3 text-xs text-muted-foreground">
-                      <span>Health: {alt.impact.healthScore}/100</span>
-                      <span>Resilience: {alt.impact.resilienceMonths}mo</span>
-                      <span>90d: {fmtCompact(alt.impact.projected90dCash, currency)}</span>
+                      <span>{t('scenarios.healthShort')}: {alt.impact.healthScore}/100</span>
+                      <span>{t('scenarios.resilienceShort')}: {alt.impact.resilienceMonths}{t('forecast.mo')}</span>
+                      <span>{t('scenarios.d90')}: {fmtCompact(alt.impact.projected90dCash, currency)}</span>
                     </div>
                   </button>
                 ))}
@@ -411,16 +413,15 @@ export default function PersonalScenariosPage() {
           {/* Actions */}
           <div className="flex gap-2">
             <Button variant="outline" className="flex-1" onClick={handleReset} data-testid="scenario-reset">
-              <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> New Scenario
+              <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> {t('scenarios.newScenario')}
             </Button>
             <Button variant="outline" className="flex-1" onClick={() => setMode('sliders')}>
-              <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5" /> Adjust
+              <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5" /> {t('scenarios.adjust')}
             </Button>
           </div>
 
           <p className="text-center text-[11px] text-muted-foreground">
-            All financial projections are deterministic and based on your current data.
-            This is planning support, not regulated financial advice.
+            {t('scenarios.footnote')}
           </p>
         </div>
       )}
@@ -429,7 +430,7 @@ export default function PersonalScenariosPage() {
         <div className="flex items-center justify-center py-12">
           <div className="flex items-center gap-2 text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin" />
-            <span className="text-sm">Calculating consequences...</span>
+            <span className="text-sm">{t('scenarios.calculating')}</span>
           </div>
         </div>
       )}

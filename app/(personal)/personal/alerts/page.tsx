@@ -7,6 +7,7 @@ import { ArrowLeft, AlertTriangle, AlertCircle, Info, ChevronRight } from 'lucid
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { track } from '@/lib/analytics/client';
+import { useT } from '@/components/personal/i18n-provider';
 
 interface PersonalAlert {
   id: string;
@@ -57,6 +58,7 @@ const SEVERITY_CONFIG = {
 };
 
 function AlertCard({ alert }: { alert: PersonalAlert }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(false);
   const config = SEVERITY_CONFIG[alert.severity];
   const Icon = config.icon;
@@ -91,17 +93,17 @@ function AlertCard({ alert }: { alert: PersonalAlert }) {
       {expanded && (
         <div className="mt-3 ml-10 space-y-2 border-t border-border/50 pt-3">
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">What happened</p>
+            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{t('alerts.whatHappened')}</p>
             <p className="mt-0.5 text-sm">{alert.explanation}</p>
           </div>
           {alert.recommendation && (
             <div>
-              <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">What Nexus recommends checking</p>
+              <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{t('alerts.recommends')}</p>
               <p className="mt-0.5 text-sm">{alert.recommendation}</p>
             </div>
           )}
           {alert.context && (
-            <p className="text-[11px] text-muted-foreground">Context: {alert.context}</p>
+            <p className="text-[11px] text-muted-foreground">{t('alerts.context', { context: alert.context })}</p>
           )}
         </div>
       )}
@@ -131,6 +133,7 @@ function AlertSection({ title, alerts, severity }: { title: string; alerts: Pers
 }
 
 export default function PersonalAlertsPage() {
+  const t = useT();
   const [data, setData] = useState<AlertsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -144,11 +147,11 @@ export default function PersonalAlertsPage() {
       setData(json);
       track('personal_alerts_viewed');
     } catch (e: any) {
-      setError(e.message || 'Failed to load alerts');
+      setError(e.message || t('alerts.errLoad'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => { fetchAlerts(); }, [fetchAlerts]);
 
@@ -157,7 +160,7 @@ export default function PersonalAlertsPage() {
       <div className="space-y-6 pt-8">
         <div className="flex items-center gap-2">
           <Link href="/personal" className="text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" /></Link>
-          <h1 className="text-xl font-bold">Financial Alerts</h1>
+          <h1 className="text-xl font-bold">{t('alerts.title')}</h1>
         </div>
         <div className="flex items-center justify-center py-20">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-foreground/20 border-t-foreground" />
@@ -171,7 +174,7 @@ export default function PersonalAlertsPage() {
       <div className="space-y-6 pt-8">
         <div className="flex items-center gap-2">
           <Link href="/personal" className="text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" /></Link>
-          <h1 className="text-xl font-bold">Financial Alerts</h1>
+          <h1 className="text-xl font-bold">{t('alerts.title')}</h1>
         </div>
         <Card><CardContent className="py-12 text-center text-muted-foreground">{error}</CardContent></Card>
       </div>
@@ -187,21 +190,21 @@ export default function PersonalAlertsPage() {
       <div>
         <div className="flex items-center gap-2">
           <Link href="/personal" className="text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" /></Link>
-          <h1 className="text-xl font-bold">Financial Alerts</h1>
+          <h1 className="text-xl font-bold">{t('alerts.title')}</h1>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
           {summary.total === 0
-            ? 'No alerts right now — your finances are on track.'
-            : `${summary.total} alert${summary.total !== 1 ? 's' : ''} based on your current financial data.`}
+            ? t('alerts.noneSub')
+            : t(summary.total === 1 ? 'alerts.countSubOne' : 'alerts.countSub', { count: summary.total })}
         </p>
       </div>
 
       {/* Summary badges */}
       {summary.total > 0 && (
         <div className="flex gap-2">
-          {summary.critical > 0 && <Badge className={`${SEVERITY_CONFIG.critical.badge}`}>{summary.critical} critical</Badge>}
-          {summary.warning > 0 && <Badge className={`${SEVERITY_CONFIG.warning.badge}`}>{summary.warning} warning</Badge>}
-          {summary.info > 0 && <Badge className={`${SEVERITY_CONFIG.info.badge}`}>{summary.info} informational</Badge>}
+          {summary.critical > 0 && <Badge className={`${SEVERITY_CONFIG.critical.badge}`}>{summary.critical} {t('alerts.critical')}</Badge>}
+          {summary.warning > 0 && <Badge className={`${SEVERITY_CONFIG.warning.badge}`}>{summary.warning} {t('alerts.warning')}</Badge>}
+          {summary.info > 0 && <Badge className={`${SEVERITY_CONFIG.info.badge}`}>{summary.info} {t('alerts.info')}</Badge>}
         </div>
       )}
 
@@ -212,21 +215,20 @@ export default function PersonalAlertsPage() {
             <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10">
               <Info className="h-5 w-5 text-emerald-600" />
             </div>
-            <p className="text-sm font-medium">All clear</p>
-            <p className="mt-1 text-xs text-muted-foreground">No financial alerts at this time. We&apos;ll notify you if something needs attention.</p>
+            <p className="text-sm font-medium">{t('alerts.allClear')}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{t('alerts.allClearBody')}</p>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-6">
-          <AlertSection title="Requires immediate attention" alerts={alerts} severity="critical" />
-          <AlertSection title="Worth reviewing" alerts={alerts} severity="warning" />
-          <AlertSection title="Good to know" alerts={alerts} severity="info" />
+          <AlertSection title={t('alerts.sectionCritical')} alerts={alerts} severity="critical" />
+          <AlertSection title={t('alerts.sectionWarning')} alerts={alerts} severity="warning" />
+          <AlertSection title={t('alerts.sectionInfo')} alerts={alerts} severity="info" />
         </div>
       )}
 
       <p className="text-center text-[11px] text-muted-foreground">
-        Alerts are computed deterministically from your financial data. They are not regulated financial advice.
-        Language such as &ldquo;consider reviewing&rdquo; indicates planning suggestions, not mandatory actions.
+        {t('alerts.footnote')}
       </p>
     </div>
   );

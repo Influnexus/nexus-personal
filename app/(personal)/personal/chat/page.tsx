@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { track } from '@/lib/analytics/client';
 import ReactMarkdown from 'react-markdown';
+import { useT, useLocale } from '@/components/personal/i18n-provider';
 
 interface Message {
   id: string;
@@ -16,16 +17,11 @@ interface Message {
   isStreaming?: boolean;
 }
 
-const STARTERS = [
-  'How am I doing financially?',
-  'Can I afford a ₹2 lakh laptop?',
-  'What will my cash look like in 90 days?',
-  'Where am I spending the most?',
-  'What should I pay attention to?',
-  'How much resilience do I have?',
-];
+const STARTER_KEYS = ['chat.starter1', 'chat.starter2', 'chat.starter3', 'chat.starter4', 'chat.starter5', 'chat.starter6'];
 
 export default function PersonalChatPage() {
+  const t = useT();
+  const locale = useLocale();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -64,14 +60,14 @@ export default function PersonalChatPage() {
       const res = await fetch('/api/personal/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: apiMessages }),
+        body: JSON.stringify({ messages: apiMessages, locale }),
       });
 
       if (!res.ok) {
         throw new Error(
-          res.status === 401 ? 'Please sign in again.'
-          : res.status === 429 ? "You're sending messages a little too fast. Please wait a few seconds and try again."
-          : 'Failed to get response.'
+          res.status === 401 ? t('chat.errSignIn')
+          : res.status === 429 ? t('chat.errRate')
+          : t('chat.errFailed')
         );
       }
 
@@ -108,16 +104,16 @@ export default function PersonalChatPage() {
               content += data.delta;
               setMessages(prev => prev.map(m => m.id === assistantMsg.id ? { ...m, content, isStreaming: true } : m));
             } else if (data.label) {
-              // Tool start
-              setToolStatus(data.label);
+              // Tool start — localize the status label client-side using the tool name.
+              setToolStatus(data.name ? t('chat.tool.' + data.name) : t('chat.toolDefault'));
               if (data.name) toolsUsed.push(data.name);
             } else if (data.code) {
               // Error event (e.g. rate_limited, ai_unavailable) — show a clear, friendly message.
               const friendly = data.code === 'rate_limited'
-                ? "You're sending messages a little too fast. Please wait a few seconds and try again."
+                ? t('chat.errRate')
                 : data.code === 'ai_unavailable'
-                ? 'Nexus is briefly unavailable. Please try again in a moment.'
-                : (data.message || 'Something went wrong. Please try again.');
+                ? t('chat.errUnavailable')
+                : (data.message || t('chat.errGeneric'));
               setError(friendly);
               setMessages(prev => prev.filter(m => m.id !== assistantMsg.id));
             }
@@ -129,7 +125,7 @@ export default function PersonalChatPage() {
 
       // Finalize
       setMessages(prev => prev.map(m =>
-        m.id === assistantMsg.id ? { ...m, content: content || 'I couldn\'t generate a response. Please try again.', isStreaming: false, toolsUsed: toolsUsed.length > 0 ? toolsUsed : undefined } : m
+        m.id === assistantMsg.id ? { ...m, content: content || t('chat.noResponse'), isStreaming: false, toolsUsed: toolsUsed.length > 0 ? toolsUsed : undefined } : m
       ));
     } catch (e: any) {
       setError(e.message || 'Failed to send message');
@@ -139,7 +135,7 @@ export default function PersonalChatPage() {
       setToolStatus(null);
       inputRef.current?.focus();
     }
-  }, [messages, loading]);
+  }, [messages, loading, locale, t]);
 
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -159,12 +155,12 @@ export default function PersonalChatPage() {
       <div className="flex items-center gap-2 px-4 py-3 border-b border-border/60">
         <Link href="/personal" className="text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" /></Link>
         <div>
-          <h1 className="text-sm font-semibold">Ask Nexus</h1>
-          <p className="text-[11px] text-muted-foreground">Understand your money. Explore decisions. See what happens next.</p>
+          <h1 className="text-sm font-semibold">{t('chat.title')}</h1>
+          <p className="text-[11px] text-muted-foreground">{t('chat.subtitle')}</p>
         </div>
         {messages.length > 0 && (
           <Button variant="ghost" size="sm" className="ml-auto" onClick={handleReset}>
-            <RotateCcw className="h-3.5 w-3.5 mr-1" /> New chat
+            <RotateCcw className="h-3.5 w-3.5 mr-1" /> {t('chat.newChat')}
           </Button>
         )}
       </div>
@@ -176,19 +172,19 @@ export default function PersonalChatPage() {
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-foreground/5 mb-4">
               <Sparkles className="h-5 w-5 text-foreground/60" />
             </div>
-            <h2 className="text-lg font-semibold">Ask Nexus</h2>
+            <h2 className="text-lg font-semibold">{t('chat.title')}</h2>
             <p className="mt-1 text-sm text-muted-foreground max-w-md">
-              Ask about your financial health, spending, resilience, forecast, or explore &ldquo;what if&rdquo; scenarios.
+              {t('chat.emptyBody')}
             </p>
             <div className="mt-6 flex flex-wrap justify-center gap-2 max-w-lg">
-              {STARTERS.map(s => (
+              {STARTER_KEYS.map(k => (
                 <button
-                  key={s}
-                  onClick={() => sendMessage(s)}
+                  key={k}
+                  onClick={() => sendMessage(t(k))}
                   className="rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                   data-testid="starter-prompt"
                 >
-                  {s}
+                  {t(k)}
                 </button>
               ))}
             </div>
@@ -249,7 +245,7 @@ export default function PersonalChatPage() {
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
-            placeholder="Ask about your finances..."
+            placeholder={t('chat.placeholder')}
             className="flex-1 resize-none rounded-xl border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring min-h-[40px] max-h-[120px]"
             rows={1}
             disabled={loading}
@@ -260,7 +256,7 @@ export default function PersonalChatPage() {
           </Button>
         </form>
         <p className="mt-1.5 text-center text-[10px] text-muted-foreground">
-          Financial data is calculated deterministically by Nexus. AI explains results — it does not calculate them. Not regulated financial advice.
+          {t('chat.disclaimer')}
         </p>
       </div>
     </div>

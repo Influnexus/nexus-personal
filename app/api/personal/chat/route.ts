@@ -11,9 +11,25 @@ import { personalService } from '@/lib/services/personal.service';
 import { transactionsRepo } from '@/lib/repositories/transactions';
 import { trackServer } from '@/lib/analytics/track-server';
 import { rateLimit } from '@/lib/rate-limit';
+import { AI_LANGUAGE_NAMES, normalizeLocale } from '@/lib/personal/i18n/config';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
+
+// Build a strict language directive. This ONLY controls the natural language of the reply —
+// it never changes which tools run or the deterministic numbers they return.
+function languageDirective(uiLocale: string): string {
+  const preferred = AI_LANGUAGE_NAMES[normalizeLocale(uiLocale)] || 'English';
+  const supported = Object.values(AI_LANGUAGE_NAMES).join(', ');
+  return [
+    '\n\nLANGUAGE (NON-NEGOTIABLE)',
+    `• The user's preferred interface language is ${preferred}.`,
+    `• Detect the language of the user's latest message. If it is one of: ${supported} — reply in THAT language. Otherwise reply in ${preferred}.`,
+    '• If the user explicitly asks you to switch languages, honour that request.',
+    '• Translate ONLY your natural-language wording. NEVER translate, localise, or alter any number, currency symbol, currency code, percentage, month count, date, or tool-derived figure — reproduce them exactly as the tools return them (e.g. keep ₹ and INR grouping).',
+    '• The financial facts and grounding rules above always apply regardless of language. If data is missing, say so clearly in the user\u2019s language and do not invent figures.',
+  ].join('\n');
+}
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -22,7 +38,7 @@ export async function POST(req: NextRequest) {
   const ws = await personalService.findWorkspaceForUser(session.user.id);
   if (!ws) return new Response('No personal workspace', { status: 404 });
 
-  const { messages } = await req.json();
+  const { messages, locale } = await req.json();
   if (!Array.isArray(messages) || messages.length === 0) return new Response('messages required', { status: 400 });
 
   // Rate limit
@@ -49,7 +65,7 @@ export async function POST(req: NextRequest) {
       try {
         // Build messages with memory
         const memoryContext = await memoryService.getMemoryContext(ws.id).catch(() => '');
-        const sys = { role: 'system' as const, content: PERSONAL_SYSTEM_PROMPT + (memoryContext ? `\n\nPERSONAL MEMORY:\n${memoryContext}` : '') };
+        const sys = { role: 'system' as const, content: PERSONAL_SYSTEM_PROMPT + languageDirective(locale) + (memoryContext ? `\n\nPERSONAL MEMORY:\n${memoryContext}` : '') };
         const compacted = await compactMessages(messages);
         const ctxMsgs: any[] = [sys, ...compacted];
         const usedTools: { name: string; result: any }[] = [];

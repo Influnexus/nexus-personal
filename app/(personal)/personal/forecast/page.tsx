@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { track } from '@/lib/analytics/client';
+import { useT } from '@/components/personal/i18n-provider';
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine,
 } from 'recharts';
@@ -98,6 +99,7 @@ function ChartTooltip({ active, payload, label, currency }: any) {
 }
 
 export default function PersonalForecastPage() {
+  const t = useT();
   const [data, setData] = useState<ForecastData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -112,11 +114,11 @@ export default function PersonalForecastPage() {
       setData(json);
       track('personal_forecast_viewed');
     } catch (e: any) {
-      setError(e.message || 'Failed to load forecast');
+      setError(e.message || t('forecast.errLoad'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => { fetchForecast(); }, [fetchForecast]);
 
@@ -125,7 +127,7 @@ export default function PersonalForecastPage() {
       <div className="space-y-6 pt-8">
         <div className="flex items-center gap-2">
           <Link href="/personal" className="text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" /></Link>
-          <h1 className="text-xl font-bold">Cash Forecast</h1>
+          <h1 className="text-xl font-bold">{t('forecast.title')}</h1>
         </div>
         <div className="flex items-center justify-center py-20">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-foreground/20 border-t-foreground" />
@@ -139,9 +141,9 @@ export default function PersonalForecastPage() {
       <div className="space-y-6 pt-8">
         <div className="flex items-center gap-2">
           <Link href="/personal" className="text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" /></Link>
-          <h1 className="text-xl font-bold">Cash Forecast</h1>
+          <h1 className="text-xl font-bold">{t('forecast.title')}</h1>
         </div>
-        <Card><CardContent className="py-12 text-center text-muted-foreground">{error || 'Unable to compute forecast. Add more transactions first.'}</CardContent></Card>
+        <Card><CardContent className="py-12 text-center text-muted-foreground">{error || t('forecast.errLoad')}</CardContent></Card>
       </div>
     );
   }
@@ -168,34 +170,34 @@ export default function PersonalForecastPage() {
       {/* Header */}
       <div className="flex items-center gap-2">
         <Link href="/personal" className="text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" /></Link>
-        <h1 className="text-xl font-bold">Cash Forecast</h1>
-        <Badge variant="outline" className="ml-2 text-[10px]">90 days</Badge>
+        <h1 className="text-xl font-bold">{t('forecast.title')}</h1>
+        <Badge variant="outline" className="ml-2 text-[10px]">{t('forecast.days90')}</Badge>
       </div>
 
       {/* Key metrics row */}
       <div className="grid gap-3 sm:grid-cols-4" data-testid="forecast-metrics">
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Projected cash position</p>
+            <p className="text-xs text-muted-foreground">{t('forecast.projectedPosition')}</p>
             <p className="mt-1 text-2xl font-bold tabular-nums">{formatMoney(forecast.endingCash, currency)}</p>
-            <p className="text-xs text-muted-foreground">in 90 days</p>
+            <p className="text-xs text-muted-foreground">{t('forecast.in90days')}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Projected 90-day change</p>
+            <p className="text-xs text-muted-foreground">{t('forecast.projected90Change')}</p>
             <p className={`mt-1 text-2xl font-bold tabular-nums ${change90d >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
               {change90d >= 0 ? '+' : ''}{formatMoney(change90d, currency)}
             </p>
             <p className="flex items-center gap-1 text-xs text-muted-foreground">
               {isImproving ? <TrendingUp className="h-3 w-3 text-emerald-600" /> : <TrendingDown className="h-3 w-3 text-red-500" />}
-              {changePct >= 0 ? '+' : ''}{changePct}% vs today
+              {t('forecast.vsToday', { pct: `${changePct >= 0 ? '+' : ''}${changePct}` })}
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Lowest projected cash</p>
+            <p className="text-xs text-muted-foreground">{t('forecast.lowestCash')}</p>
             <p className="mt-1 text-2xl font-bold tabular-nums">{formatMoney(forecast.lowestDay.cash, currency)}</p>
             <p className="flex items-center gap-1 text-xs text-muted-foreground">
               <Calendar className="h-3 w-3" />
@@ -205,11 +207,11 @@ export default function PersonalForecastPage() {
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Projected resilience</p>
-            <p className="mt-1 text-2xl font-bold tabular-nums">{resilience.resilienceMonths}<span className="text-base font-normal text-muted-foreground"> mo</span></p>
+            <p className="text-xs text-muted-foreground">{t('forecast.projectedResilience')}</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums">{resilience.resilienceMonths}<span className="text-base font-normal text-muted-foreground"> {t('forecast.mo')}</span></p>
             <p className="flex items-center gap-1 text-xs text-muted-foreground">
               <Shield className="h-3 w-3" />
-              if income stopped
+              {t('forecast.ifIncomeStopped')}
             </p>
           </CardContent>
         </Card>
@@ -219,29 +221,29 @@ export default function PersonalForecastPage() {
       {data.metrics && (
         <Card data-testid="forecast-projections">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Where your money is heading</CardTitle>
+            <CardTitle className="text-base">{t('forecast.headingMoney')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-sm">
-              <div><div className="text-xs text-muted-foreground">Monthly income</div><div className="font-semibold tabular-nums">{formatMoney(data.metrics.monthlyIncome, currency)}</div></div>
-              <div><div className="text-xs text-muted-foreground">Monthly expenses</div><div className="font-semibold tabular-nums">{formatMoney(data.metrics.monthlyExpenses, currency)}</div></div>
-              <div><div className="text-xs text-muted-foreground">Monthly surplus</div><div className="font-semibold tabular-nums">{formatMoney(data.metrics.monthlySurplus, currency)}</div></div>
-              <div><div className="text-xs text-muted-foreground">Savings rate</div><div className="font-semibold tabular-nums">{Math.round((data.metrics.savingsRate || 0) * 100)}%</div></div>
+              <div><div className="text-xs text-muted-foreground">{t('forecast.monthlyIncome')}</div><div className="font-semibold tabular-nums">{formatMoney(data.metrics.monthlyIncome, currency)}</div></div>
+              <div><div className="text-xs text-muted-foreground">{t('forecast.monthlyExpenses')}</div><div className="font-semibold tabular-nums">{formatMoney(data.metrics.monthlyExpenses, currency)}</div></div>
+              <div><div className="text-xs text-muted-foreground">{t('forecast.monthlySurplus')}</div><div className="font-semibold tabular-nums">{formatMoney(data.metrics.monthlySurplus, currency)}</div></div>
+              <div><div className="text-xs text-muted-foreground">{t('forecast.savingsRate')}</div><div className="font-semibold tabular-nums">{Math.round((data.metrics.savingsRate || 0) * 100)}%</div></div>
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 border-t border-border pt-3 text-sm">
-              <div><div className="text-xs text-muted-foreground">Current cash</div><div className="font-semibold tabular-nums">{formatMoney(data.projections.startingCash, currency)}</div></div>
-              <div><div className="text-xs text-muted-foreground">In 30 days</div><div className="font-semibold tabular-nums">{formatMoney(data.projections.day30, currency)}</div></div>
-              <div><div className="text-xs text-muted-foreground">In 60 days</div><div className="font-semibold tabular-nums">{formatMoney(data.projections.day60, currency)}</div></div>
-              <div><div className="text-xs text-muted-foreground">In 90 days</div><div className="font-semibold tabular-nums">{formatMoney(data.projections.day90, currency)}</div></div>
+              <div><div className="text-xs text-muted-foreground">{t('forecast.currentCash')}</div><div className="font-semibold tabular-nums">{formatMoney(data.projections.startingCash, currency)}</div></div>
+              <div><div className="text-xs text-muted-foreground">{t('forecast.in30')}</div><div className="font-semibold tabular-nums">{formatMoney(data.projections.day30, currency)}</div></div>
+              <div><div className="text-xs text-muted-foreground">{t('forecast.in60')}</div><div className="font-semibold tabular-nums">{formatMoney(data.projections.day60, currency)}</div></div>
+              <div><div className="text-xs text-muted-foreground">{t('forecast.in90')}</div><div className="font-semibold tabular-nums">{formatMoney(data.projections.day90, currency)}</div></div>
             </div>
             {data.sensitivities?.length > 0 && (
               <div className="border-t border-border pt-3">
-                <div className="mb-2 text-xs font-medium text-muted-foreground">Sensitivity — 90-day cash under different conditions</div>
+                <div className="mb-2 text-xs font-medium text-muted-foreground">{t('forecast.sensitivityTitle')}</div>
                 <div className="space-y-1.5">
                   {data.sensitivities.map((sv: any) => (
                     <div key={sv.key} className="flex items-center justify-between text-sm">
                       <span>{sv.label}</span>
-                      <span className="tabular-nums text-muted-foreground">{formatMoney(sv.day90, currency)} <span className="text-xs">({formatMoney(sv.monthlySurplus, currency)}/mo)</span></span>
+                      <span className="tabular-nums text-muted-foreground">{formatMoney(sv.day90, currency)} <span className="text-xs">({t('unit.perMo', { value: formatMoney(sv.monthlySurplus, currency) })})</span></span>
                     </div>
                   ))}
                 </div>
@@ -261,10 +263,10 @@ export default function PersonalForecastPage() {
       <Card data-testid="forecast-chart">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-semibold text-muted-foreground">
-            Where is my money going?
+            {t('forecast.chartTitle')}
           </CardTitle>
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs text-muted-foreground">
-            <span>Today: <b className="text-foreground">{formatMoney(forecast.startingCash, currency)}</b></span>
+            <span>{t('forecast.today')}: <b className="text-foreground">{formatMoney(forecast.startingCash, currency)}</b></span>
             <span>→</span>
             <span>30d: <b className="text-foreground">{formatMoney(day30?.cash || 0, currency)}</b></span>
             <span>→</span>
@@ -307,7 +309,7 @@ export default function PersonalForecastPage() {
                   stroke="hsl(var(--muted-foreground))"
                   strokeDasharray="3 3"
                   strokeOpacity={0.5}
-                  label={{ value: 'Today', position: 'right', fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                  label={{ value: t('forecast.today'), position: 'right', fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
                 />
                 <Area
                   type="monotone"
@@ -324,8 +326,7 @@ export default function PersonalForecastPage() {
           <div className="mt-2 flex items-center gap-1.5 rounded-lg border border-border bg-muted/50 px-3 py-2">
             <Info className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             <p className="text-xs text-muted-foreground">
-              <b className="text-foreground">Known</b> data (entered transactions, detected patterns) is distinguished from <b className="text-foreground">Projected</b> values (expected recurring income/spending).
-              Projections are not guaranteed outcomes.
+              {t('forecast.knownProjected')}
             </p>
           </div>
         </CardContent>
@@ -342,10 +343,10 @@ export default function PersonalForecastPage() {
       <Card data-testid="forecast-drivers">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-semibold text-muted-foreground">What is driving the forecast?</CardTitle>
+            <CardTitle className="text-sm font-semibold text-muted-foreground">{t('forecast.drivers')}</CardTitle>
             <div className="flex gap-2 text-[11px]">
-              <Badge variant="outline">{data.projectedCount} recurring</Badge>
-              <Badge variant="outline">{data.knownCount} known events</Badge>
+              <Badge variant="outline">{t('forecast.recurring', { count: data.projectedCount })}</Badge>
+              <Badge variant="outline">{t('forecast.knownEvents', { count: data.knownCount })}</Badge>
             </div>
           </div>
         </CardHeader>
@@ -367,7 +368,7 @@ export default function PersonalForecastPage() {
                   </div>
                 </div>
                 <span className={`text-sm font-semibold tabular-nums ${d.direction === 'inflow' ? 'text-emerald-600' : 'text-red-500'}`}>
-                  {d.direction === 'inflow' ? '+' : '−'}{formatMoney(Math.abs(d.monthlyAmount), currency)}<span className="text-xs font-normal text-muted-foreground">/mo</span>
+                  {d.direction === 'inflow' ? '+' : '−'}{formatMoney(Math.abs(d.monthlyAmount), currency)}<span className="text-xs font-normal text-muted-foreground">{t('unit.perMo', { value: '' })}</span>
                 </span>
               </div>
             ))}
@@ -380,15 +381,14 @@ export default function PersonalForecastPage() {
               onClick={() => { setDriversExpanded(!driversExpanded); track('personal_forecast_interaction', { feature: 'drivers_toggle' }); }}
             >
               {driversExpanded ? <ChevronUp className="mr-1 h-3 w-3" /> : <ChevronDown className="mr-1 h-3 w-3" />}
-              {driversExpanded ? 'Show less' : `Show all ${drivers.length} drivers`}
+              {driversExpanded ? t('forecast.showLess') : t('forecast.showAll', { count: drivers.length })}
             </Button>
           )}
         </CardContent>
       </Card>
 
       <p className="text-center text-[11px] text-muted-foreground">
-        All figures are computed deterministically from your transaction history — projections are not guaranteed outcomes.
-        This is not regulated financial advice.
+        {t('forecast.footnote')}
       </p>
     </div>
   );

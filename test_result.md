@@ -7362,3 +7362,35 @@ status_history:
       - Chat SSE format uses separate event:/data: lines (not data: {"type":...})
       - Financial freedom response structure: {freedom: {...}, currency, hasProfile}
       - All tests used fresh arbitrary emails (no special-case accounts)
+
+  - agent: "main"
+    date: "Sprint 2.7 — Multilingual Support"
+    message: |
+      FEATURE: Production-quality multilingual support for Nexus Personal (baseline commit 891db88, verified present).
+      LANGUAGES: English (source/fallback), Hindi, Telugu, Spanish, German fully translated; Tamil selectable but
+      currently inherits English via the per-key fallback (flagged for a verified native-speaker pass — see ta.ts note).
+      ARCHITECTURE (isolated, scalable, no heavy dep):
+        - lib/personal/i18n/config.ts (LOCALES, normalizeLocale, LOCALE_META, AI_LANGUAGE_NAMES)
+        - lib/personal/i18n/dictionaries/{en,hi,te,ta,es,de}.ts (flat dotted keys; en is source of truth)
+        - lib/personal/i18n/index.ts (isomorphic createTranslator with interpolation + English fallback + raw-key fallback)
+        - lib/personal/i18n/server.ts (getServerLocale/getServerT via next/headers cookie — used by server Overview page)
+        - components/personal/i18n-provider.tsx (client context; initialLocale from server cookie -> no hydration mismatch;
+          setLocale persists cookie + localStorage then router.refresh() so server components re-render localized)
+        - components/personal/LanguageSelector.tsx (desktop + mobile-compact; in PersonalNav)
+      UI COVERAGE: nav, Overview (server), Onboarding (+confirmation/edit), Financial Freedom, Alerts, Forecast,
+        Scenarios, Ask Nexus chat, HealthCard, ResilienceCard — headings, labels, buttons, empty/loading/error states,
+        validation, placeholders, disclaimers, tooltips.
+      ASK NEXUS MULTILINGUAL: app/api/personal/chat/route.ts appends a strict LANGUAGE directive to the system prompt:
+        detect the user's message language (en/hi/te/ta/es/de) and reply in it, else reply in the UI-preferred language;
+        NEVER translate/alter numbers, currency symbols/codes, %, months, dates, or tool figures; grounding + tool
+        restrictions unchanged; missing-data communicated in the user's language. Client sends {locale}; tool-status
+        labels localized client-side.
+      FINANCIAL ENGINE: UNCHANGED. lib/core/finance/* not modified. Numbers/currency are presentation-only interpolated.
+      REGRESSION: Enterprise/CFO — ZERO files touched (verified via git status). MongoDB/auth/architecture unchanged.
+      TESTS: 73 existing deterministic tests still pass + 11 new tests/core/p7.i18n.test.ts (key coverage, fallback,
+        interpolation, locale normalization, AI language coverage, numbers-never-translated) = 84/84 passing.
+      BUILD: `yarn build` succeeded (44.8s), all /personal + /cfo routes compiled, 0 errors.
+      LIMITATIONS: (1) Tamil pending native translation (English fallback in place); (2) some deterministic core-generated
+        sentences (a few alert explanations / FI factor detail strings produced inside lib/core) remain in English by
+        design to avoid touching the financial engine — surrounding chrome is fully localized. (3) Frontend visual QA via
+        the screenshot agent not run (requires user permission per protocol; harness had SPA-nav read quirks).
