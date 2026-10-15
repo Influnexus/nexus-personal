@@ -120,8 +120,12 @@ export function isLocale(x: unknown): x is LocaleCode {
 export function normalizeLocale(value?: string | null): LocaleCode {
   if (!value) return DEFAULT_LOCALE;
   const raw = String(value).toLowerCase().trim();
-  if (isLocale(raw)) return raw;
-  const base = raw.split(/[-_]/)[0];
+  // Note: because `LocaleCode = string`, the TS predicate `isLocale` narrows the
+  // false branch to `never`. We therefore read `raw` through a fresh alias to
+  // keep plain-string typing on the fallback path.
+  const alias: string = raw;
+  if (isLocale(alias)) return alias;
+  const base: string = raw.split(/[-_]/)[0] ?? '';
   return isLocale(base) ? base : DEFAULT_LOCALE;
 }
 

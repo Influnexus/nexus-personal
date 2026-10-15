@@ -7445,6 +7445,43 @@ status_history:
 
   - agent: "testing"
     date: "Sprint P7.1 — Visual QA"
+
+  - agent: "main"
+    date: "Sprint P7.2 — Release Readiness Validation"
+    message: |
+      SCOPE: Autonomous validation of the P7.1 release candidate — NO new features, no deploy.
+      MOBILE OVERFLOW: Re-measured scrollWidth vs clientWidth across 7 Personal routes
+        (/personal, /forecast, /financial-freedom, /scenarios, /chat, /alerts, /onboarding),
+        5 viewports (320/360/390/430/1920 px), and 5 languages (en, hi, de LTR + ar, ur RTL).
+        Total 175 checks → ZERO overflow, ZERO direction errors. The earlier "7px overflow"
+        report was transient and is NOT reproducible on the current P7.1 shell.
+      TS CLEANUP: One pre-existing type-predicate narrowing nit in lib/personal/i18n/config.ts
+        (TS inferring `never` on the fallback branch of `isLocale`) was corrected with a 6-line
+        alias pattern. Build was previously green via tsconfig ignoreBuildErrors; the fix just
+        clears the diagnostic. All other TS errors (ResilienceCard, lib/billing/repo,
+        lib/core/finance/scenario-personal, p6 test fixture types) PRE-EXIST this sprint and
+        are out of scope.
+      GIT: P6 (891db88), P7 (88aa166), and P7.1 (d8f8011) all verified locally. Local branch is
+        `main`. No `origin` remote is configured in this sandbox → GitHub synchronization must
+        be done via the Emergent "Save to GitHub" button; direct `git push` is not possible here.
+        Working tree is otherwise clean (only untracked .env.example + yarn.lock, both safe).
+      SECURITY SPOT-CHECK (read-only):
+        - No .env file is tracked (verified with git ls-files).
+        - .env.example contains blank placeholders only.
+        - No hardcoded secrets found (only a documentation comment in stripe.provider.ts).
+        - Every /api/personal/* route guards with `await auth()` and scopes to the caller's
+          workspace via personalService.findWorkspaceForUser / organizationId.
+        - Rate limiting active on Ask Nexus (15 msgs / 60 s / workspace).
+        - CSP frame-ancestors configured in next.config.js; X-Frame-Options intentionally omitted
+          (CSP supersedes).
+      TESTS: 92/92 deterministic tests pass (unchanged).
+      BUILD: `yarn build` succeeded (28.71 s). All /personal + /cfo + /api routes compiled.
+      FILES CHANGED THIS SPRINT: lib/personal/i18n/config.ts only (6 insertions, 2 deletions).
+      ENTERPRISE/CFO: `git diff --name-only HEAD` under app/cfo, app/api/enterprise,
+        lib/core/finance, lib/billing, auth.ts → 0 files. Confirmed untouched.
+      RELEASE BLOCKERS: None.
+      PRODUCTION STATUS: NOT deployed, NOT pushed — awaiting founder approval + Save to GitHub.
+
     message: |
       ✅ VISUAL QA COMPLETE - P7.1 GLOBAL LANGUAGE REGISTRY VERIFIED
       
