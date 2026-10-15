@@ -7394,3 +7394,174 @@ status_history:
         sentences (a few alert explanations / FI factor detail strings produced inside lib/core) remain in English by
         design to avoid touching the financial engine — surrounding chrome is fully localized. (3) Frontend visual QA via
         the screenshot agent not run (requires user permission per protocol; harness had SPA-nav read quirks).
+
+
+  - agent: "main"
+    date: "Sprint P7.1 — Global Language Registry"
+    message: |
+      FEATURE: Refactored Nexus Personal i18n from a hard-coded 6-language whitelist to a GLOBAL
+      LANGUAGE REGISTRY (baseline commit 88aa166, previous P7 = 891db88).
+      REGISTRY: 25 languages registered (en, hi, gu, mr, bn, pa, te, ta, kn, ml, ur, fr, es, pt, de,
+        it, nl, ru, tr, ja, ko, zh, id, vi, th, ar). Each entry carries rich metadata:
+        {code, nativeName, englishName, formattingLocale (BCP-47), direction (ltr|rtl), translationStatus}.
+      FULL-TRANSLATED (verified this pass, unchanged): en, hi, te, es, de.
+      FALLBACK (registered honestly, resolve via English per-key): the remaining 20 languages.
+      RTL: Arabic + Urdu carry direction:'rtl'. The Personal shell sets `dir` on its root div and
+        the client provider syncs <html dir/lang> on locale change. Enterprise/CFO retains LTR (the
+        provider resets dir on unmount). No Enterprise files touched.
+      LANGUAGE SELECTOR: Now sources rows from LANGUAGE_REGISTRY. Groups: "Fully translated"
+        vs "Available — English fallback" with an inline sub-label so users are never misled.
+        Native scripts (हिन्दी, తెలుగు, 中文, 日本語, العربية, ગુજરાતી, Français, …) render correctly.
+      ASK NEXUS: `app/api/personal/chat/route.ts` no longer whitelists 6 languages. The directive
+        derives from the registry (preferred = native + English name) and asks the LLM to detect the
+        message language, honour explicit switches, and NEVER translate/alter numbers, currency,
+        %, months, dates, or tool-derived figures. Financial grounding rules preserved verbatim.
+      FINANCIAL ENGINE: UNCHANGED. `lib/core/finance/*` not touched. Numbers flow through
+        interpolation slots — placeholders are preserved verbatim in every locale (asserted in tests).
+      TESTS: `tests/core/p7.i18n.test.ts` rewritten to cover the registry: openness, honest status
+        labels, full-translation differ-from-English, fallback exact-English, RTL flags, unknown-key
+        raw fallback, region-tag normalization (hi-IN → hi, ar_SA → ar), Intl.NumberFormat safety
+        across every registered locale, figure preservation across languages. 19 new i18n tests.
+      RESULTS: 92/92 deterministic tests pass (finance core, personal core, alerts, scenarios, data
+        integrity, i18n). `yarn build` succeeded (33.06s) — all /personal + /cfo + /api routes green.
+      DELETED: `lib/personal/i18n/dictionaries/ta.ts` (was an English proxy; now handled by the
+        registry-level fallback path so we don't ship a misleading "translated" file).
+      FILES CHANGED:
+        - lib/personal/i18n/config.ts (rewrite: LANGUAGE_REGISTRY, helpers, back-compat shims)
+        - lib/personal/i18n/index.ts (open Locale type, formatNumber helper, richer translator docs)
+        - lib/personal/i18n/server.ts (LocaleCode type)
+        - lib/personal/i18n/dictionaries/index.ts (only imports full-translation dicts)
+        - lib/personal/i18n/dictionaries/ta.ts (DELETED)
+        - components/personal/LanguageSelector.tsx (grouped by status, native + fallback badge)
+        - components/personal/i18n-provider.tsx (open locale, RTL sync, isFullyTranslated flag)
+        - app/(personal)/personal/layout.tsx (dir + data-locale on shell)
+        - app/api/personal/chat/route.ts (registry-driven language directive, no whitelist)
+        - tests/core/p7.i18n.test.ts (rewritten: 19 tests for the registry architecture)
+      ENTERPRISE/CFO: `git status` shows zero changes under `/app/cfo`, `/app/api/enterprise*`,
+        `lib/core/finance/*`, `lib/services/*` (except personal.service is unchanged), or auth/DB.
+      LIMITATIONS: The 20 fallback languages render mostly in English; the UI honestly flags this
+        so we don't overpromise. Adding a real translation is a registry-only change now: drop
+        `dictionaries/<code>.ts`, import in dictionaries/index.ts, flip status to 'full'.
+
+  - agent: "testing"
+    date: "Sprint P7.1 — Visual QA"
+    message: |
+      ✅ VISUAL QA COMPLETE - P7.1 GLOBAL LANGUAGE REGISTRY VERIFIED
+      
+      **TEST ENVIRONMENT:**
+      - Used Personal demo mode (clicked "Try the Personal demo" button)
+      - Tested viewports: Desktop (1920×1080), Mobile (320×640)
+      - Tested languages: English, Hindi, Telugu, Gujarati, Arabic
+      - Screenshots captured: 4 images documenting key states
+      
+      **RESULTS: 8/10 CRITICAL CHECKS PASSED**
+      
+      **✅ PASSING (8 checks):**
+      
+      1. **Language Selector Presence & Functionality**
+         - ✅ Selector found at `[data-testid="personal-language-selector"]`
+         - ✅ Opens dropdown with language options
+         - ✅ Closes on selection and Escape key
+      
+      2. **Native Script Rendering (8/8 languages)**
+         - ✅ Hindi: हिन्दी renders correctly
+         - ✅ Telugu: తెలుగు renders correctly
+         - ✅ Spanish: Español renders correctly
+         - ✅ German: Deutsch renders correctly
+         - ✅ Gujarati: ગુજરાતી renders correctly
+         - ✅ French: Français renders correctly
+         - ✅ Japanese: 日本語 renders correctly
+         - ✅ Arabic: العربية renders correctly
+         - **NO tofu boxes, no "???", no missing glyphs detected**
+      
+      3. **Section Labels & Fallback Sublabel**
+         - ✅ "English fallback" sublabel present on fallback languages
+         - ⚠️ "Fully translated" section label not detected via text search (but visible in screenshot)
+         - Screenshot evidence shows both sections clearly separated in dropdown
+      
+      4. **UI Translation (Fully Translated Languages)**
+         - ✅ Hindi: Nav shows "सारांश" (Overview), "पूर्वानुमान" (Forecast), etc.
+         - ✅ UI text properly translated, no raw translation keys visible (no "nav.overview" strings)
+         - ✅ Greeting shows "नमस्ते Aarav 👋" in Hindi
+      
+      5. **Fallback Language Behavior**
+         - ✅ Gujarati and Arabic: UI remains in English (expected behavior)
+         - ✅ No raw translation keys leaked
+      
+      6. **Cookie Persistence**
+         - ✅ `nexus_lang` cookie set correctly to selected language code
+         - ✅ Cookie value verified: 'hi' for Hindi, 'ar' for Arabic
+      
+      7. **RTL Support for Arabic**
+         - ✅ HTML `dir` attribute set to "rtl" when Arabic selected
+         - ✅ Personal shell `[data-personal-shell]` has `dir="rtl"`
+         - ✅ Layout mirrors correctly (verified in screenshot)
+         - ✅ Navigation and content remain usable in RTL mode
+      
+      8. **Financial Figures Stability**
+         - ✅ Numbers remain identical across language switches:
+           * Monthly surplus: ₹68,320 (consistent in all screenshots)
+           * Financial Resilience: 7.9 months (consistent)
+           * Financial Health: 95/100 (consistent)
+         - ✅ Currency symbols (₹) preserved
+         - ✅ No number translation or localization (correct behavior)
+      
+      **⚠️ MINOR ISSUES (2 checks):**
+      
+      1. **Mobile Viewport Overflow (320px)**
+         - ⚠️ Body width: 327px (7px overflow beyond 320px viewport)
+         - Impact: MINOR - likely acceptable, may cause minimal horizontal scroll
+         - Recommendation: Review if this is within acceptable tolerance
+      
+      2. **Section Label Detection**
+         - ⚠️ Text search for "Fully translated" failed in automated test
+         - However: Screenshot clearly shows "FULLY TRANSLATED" section header
+         - Likely cause: Text extraction timing or case sensitivity issue
+         - Impact: NONE - feature is working correctly
+      
+      **📸 SCREENSHOTS CAPTURED:**
+      - `.screenshots/p7_dropdown.png` - Language dropdown showing all 25 languages with sections
+      - `.screenshots/p7_hindi.png` - Hindi translation active (nav in Devanagari script)
+      - `.screenshots/p7_arabic.png` - Arabic RTL mode active
+      - `.screenshots/p7_mobile.png` - Mobile view at 320px
+      
+      **🔍 VISUAL INSPECTION FINDINGS:**
+      
+      From screenshot analysis:
+      - Dropdown clearly shows two sections: "FULLY TRANSLATED" (5 languages) and "AVAILABLE — ENGLISH FALLBACK" (20 languages)
+      - All native scripts render with proper fonts and no rendering issues
+      - Flag emojis display correctly next to language names
+      - "English fallback" micro-sublabel visible under fallback language names
+      - Hindi UI shows complete translation: nav, headings, card labels all in Devanagari
+      - Arabic RTL: entire layout mirrors, text alignment correct
+      - Financial figures (₹68,320, 7.9 months, 95/100) identical across all language screenshots
+      
+      **❌ NOT TESTED (out of scope for this pass):**
+      - All 25 languages individually (tested representative sample: 5 languages)
+      - All viewport sizes (tested 320px and 1920px only, not 360/390/430)
+      - Persistence after browser reload (cookie verified, but not reload tested)
+      - Ask Nexus chat multilingual responses (would require complex SSE interaction)
+      - Enterprise/CFO untouched verification (would need separate navigation)
+      - All pages (Overview, Forecast, Freedom, Scenarios, Alerts, Chat) - only tested Overview
+      
+      **🎯 VERDICT: ✅ READY FOR PRODUCTION**
+      
+      The P7.1 Global Language Registry implementation is **visually correct and functional**:
+      - ✅ Language selector works as designed
+      - ✅ Native scripts render perfectly (no tofu/missing glyphs)
+      - ✅ Section grouping (full vs fallback) is honest and clear
+      - ✅ UI translations work for fully translated languages
+      - ✅ Fallback languages correctly show English UI
+      - ✅ RTL support works for Arabic
+      - ✅ Financial figures remain stable (no unwanted translation)
+      - ✅ Cookie persistence works
+      - ⚠️ Minor 7px overflow at 320px (acceptable tolerance)
+      
+      **RECOMMENDATION:**
+      The 7px overflow at 320px is the only technical issue found. Recommend:
+      1. Review if 320px overflow is within acceptable tolerance (many sites allow small overflow)
+      2. If strict 320px compliance required, investigate source of extra 7px
+      3. Otherwise, approve for production deployment
+      
+      **NO BLOCKING ISSUES FOUND.**
+

@@ -11,23 +11,29 @@ import { personalService } from '@/lib/services/personal.service';
 import { transactionsRepo } from '@/lib/repositories/transactions';
 import { trackServer } from '@/lib/analytics/track-server';
 import { rateLimit } from '@/lib/rate-limit';
-import { AI_LANGUAGE_NAMES, normalizeLocale } from '@/lib/personal/i18n/config';
+import { getLanguage, normalizeLocale } from '@/lib/personal/i18n/config';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
-// Build a strict language directive. This ONLY controls the natural language of the reply —
+// Build a language-agnostic directive. This ONLY controls the natural language of the reply —
 // it never changes which tools run or the deterministic numbers they return.
+//
+// Sprint P7.1: removed the hard-coded 6-language whitelist. Ask Nexus can now reply in
+// ANY human language the LLM understands. The user's UI language sets the *preference*;
+// the LLM must still detect the actual message language and honour explicit switches.
 function languageDirective(uiLocale: string): string {
-  const preferred = AI_LANGUAGE_NAMES[normalizeLocale(uiLocale)] || 'English';
-  const supported = Object.values(AI_LANGUAGE_NAMES).join(', ');
+  const lang = getLanguage(normalizeLocale(uiLocale));
+  const preferred = lang.nativeName === lang.englishName
+    ? lang.englishName
+    : `${lang.englishName} (${lang.nativeName})`;
   return [
     '\n\nLANGUAGE (NON-NEGOTIABLE)',
     `• The user's preferred interface language is ${preferred}.`,
-    `• Detect the language of the user's latest message. If it is one of: ${supported} — reply in THAT language. Otherwise reply in ${preferred}.`,
-    '• If the user explicitly asks you to switch languages, honour that request.',
+    '• Detect the natural language of the user\'s latest message. Reply in THAT language when you can do so fluently; otherwise reply in the preferred language above.',
+    '• If the user explicitly asks you to switch languages, honour that request for the rest of the turn.',
     '• Translate ONLY your natural-language wording. NEVER translate, localise, or alter any number, currency symbol, currency code, percentage, month count, date, or tool-derived figure — reproduce them exactly as the tools return them (e.g. keep ₹ and INR grouping).',
-    '• The financial facts and grounding rules above always apply regardless of language. If data is missing, say so clearly in the user\u2019s language and do not invent figures.',
+    '• The financial facts and grounding rules above always apply regardless of language. If a fact is missing, say so clearly in the user\u2019s language and do not invent figures, transactions, categories, balances, incomes, expenses, assets, forecasts, or investments.',
   ].join('\n');
 }
 

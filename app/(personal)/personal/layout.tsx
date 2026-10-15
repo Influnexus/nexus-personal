@@ -1,5 +1,7 @@
 // Nexus Personal shell (Sprint P2) — deliberately calm and minimal: no enterprise sidebar,
 // no dense analytics chrome. Distinct product experience per P2.8.
+//
+// P7.1: renders `dir` on the shell so RTL languages (Arabic, Urdu) mirror correctly.
 import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
@@ -7,16 +9,18 @@ import { Wallet } from 'lucide-react';
 import { PersonalNav } from '@/components/personal/PersonalNav';
 import { PersonalI18nProvider } from '@/components/personal/i18n-provider';
 import { getServerLocale } from '@/lib/personal/i18n/server';
+import { getDirection } from '@/lib/personal/i18n/config';
 
 export default async function PersonalLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
   if (!session?.user) redirect('/login');
   const isDemo = !!session.user.isDemo;
   const locale = await getServerLocale();
+  const dir = getDirection(locale);
 
   return (
     <PersonalI18nProvider initialLocale={locale}>
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-background" dir={dir} data-personal-shell data-locale={locale}>
         <header className="sticky top-0 z-30 border-b border-border/60 bg-background/85 backdrop-blur">
           <div className="mx-auto flex h-14 max-w-4xl items-center gap-4 px-4">
             <Link href="/personal" className="flex items-center gap-2 shrink-0" data-testid="personal-wordmark">
